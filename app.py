@@ -1,6 +1,3 @@
-import eventlet
-eventlet.monkey_patch()
-
 import os
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -36,7 +33,7 @@ CORS(
 socketio = SocketIO(
     app,
     cors_allowed_origins=allowed_origins,
-    async_mode="eventlet"
+    async_mode="threading"
 )
 
 app.register_blueprint(auth_bp,         url_prefix="/api/auth")
