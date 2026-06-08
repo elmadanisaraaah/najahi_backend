@@ -6,8 +6,8 @@ import requests
 
 schools_bp = Blueprint("schools", __name__)
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_MODEL   = "mistral-large-latest"
 
 SYSTEM_PROMPT = (
     "You are NajahiBot, a highly accurate expert assistant specializing exclusively in Moroccan higher education. "
@@ -29,13 +29,13 @@ SYSTEM_PROMPT = (
 )
 
 
-def call_groq(query: str, api_key: str):
+def call_mistral(query: str, api_key: str):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
     body = {
-        "model": GROQ_MODEL,
+        "model": MISTRAL_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": query},
@@ -43,21 +43,21 @@ def call_groq(query: str, api_key: str):
         "max_tokens": 2000,
     }
     try:
-        res = requests.post(GROQ_API_URL, headers=headers, json=body, timeout=30)
-        print(f"[Groq] status={res.status_code}")
-        print(f"[Groq] response={res.text[:300]}")
+        res = requests.post(MISTRAL_API_URL, headers=headers, json=body, timeout=30)
+        print(f"[Mistral] status={res.status_code}")
+        print(f"[Mistral] response={res.text[:300]}")
         if not res.ok:
-            print(f"[Groq] error body: {res.text}")
+            print(f"[Mistral] error body: {res.text}")
             return None
         data = res.json()
         text = data["choices"][0]["message"]["content"].strip()
-        print(f"[Groq] answer length={len(text)} chars")
+        print(f"[Mistral] answer length={len(text)} chars")
         return text
     except requests.exceptions.Timeout:
-        print("[Groq] request timed out")
+        print("[Mistral] request timed out")
         return None
     except Exception as e:
-        print(f"[Groq] exception: {e}")
+        print(f"[Mistral] exception: {e}")
         return None
 
 
@@ -76,16 +76,16 @@ def ask_school():
         if not query:
             return jsonify({"answer": "Veuillez saisir une question.", "found": False}), 200
 
-        api_key = os.environ.get("GROQ_API_KEY", "")
-        print(f"[/ask] GROQ_API_KEY prefix={api_key[:10]!r}")
+        api_key = os.environ.get("MISTRAL_API_KEY", "")
+        print(f"[/ask] MISTRAL_API_KEY prefix={api_key[:10]!r}")
 
         if not api_key:
             return jsonify({
-                "answer": "⚠️ Clé API Groq manquante. Vérifie le fichier .env (GROQ_API_KEY).",
+                "answer": "⚠️ Clé API Mistral manquante. Vérifie le fichier .env (MISTRAL_API_KEY).",
                 "found": False,
             }), 200
 
-        answer = call_groq(query, api_key)
+        answer = call_mistral(query, api_key)
 
         if not answer:
             return jsonify({
