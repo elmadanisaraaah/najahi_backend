@@ -131,7 +131,8 @@ def google_callback():
             "refresh_token": raw_refresh,
             "email": email,
         })
-        return redirect(f"{Config.FRONTEND_URL}/auth/callback?{params}")
+        frontend = Config.FRONTEND_URL.rstrip("/")
+        return redirect(f"{frontend}/auth/callback?{params}")
 
     except Exception as e:
         conn.rollback()
