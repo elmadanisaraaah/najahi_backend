@@ -109,7 +109,12 @@ def register():
     except Exception as e:
         conn.rollback()
         print("REGISTER ERROR:", str(e))
-        return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
+        s = str(e)
+        if "users_phone_number_key" in s:
+            return jsonify({"error": "Ce numéro de téléphone est déjà utilisé."}), 409
+        if "users_email_key" in s:
+            return jsonify({"error": "Cette adresse email est déjà utilisée."}), 409
+        return jsonify({"error": "Erreur serveur. Réessaie plus tard."}), 500
     finally:
         cur.close(); release_conn(conn)
 
