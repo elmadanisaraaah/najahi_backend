@@ -518,6 +518,26 @@ def score_school(school, data):
         if in_city:
             score += 5
 
+    # ── 7. PERSONALITY BONUS (10 pts) ──────────────────────────────────────
+    personality = data.get("personnalite") or []
+    if isinstance(personality, str):
+        personality = [personality]
+    personality_lower = [p.lower() for p in personality]
+
+    eng_traits  = {"analytique", "curieux", "logique", "rigoureux"}
+    biz_traits  = {"leader", "ambitieux", "charismatique", "communicant"}
+    med_traits  = {"empathique", "altruiste", "patient", "serviable"}
+    art_traits  = {"créatif", "creatif", "artistique", "imaginatif"}
+
+    if school["type"] in ("engineering", "preparatoire") and any(t in eng_traits for t in personality_lower):
+        score += 10
+    elif school["type"] == "business" and any(t in biz_traits for t in personality_lower):
+        score += 10
+    elif school["type"] == "health" and any(t in med_traits for t in personality_lower):
+        score += 10
+    elif school["type"] == "architecture" and any(t in art_traits for t in personality_lower):
+        score += 10
+
     return score
 
 
@@ -642,6 +662,42 @@ def build_fallback(school, data):
 def predict():
     try:
         data = request.get_json(silent=True) or {}
+
+        # ── Extract user from JWT (optional) ─────────────────────────────────
+        user_id = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                token = auth_header.split(" ", 1)[1].strip()
+                payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=[Config.JWT_ALGORITHM])
+                if payload.get("type") == "access":
+                    user_id = payload.get("sub")
+            except Exception:
+                pass
+
+        # ── Fill missing bac/moyenne/ville from student profile ──────────────
+        if user_id and (not data.get("bac") or not data.get("moyenne") or not data.get("ville")):
+            conn = get_conn()
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT type_bac, note_bac, ville FROM student_profiles WHERE user_id = %s LIMIT 1",
+                        (user_id,)
+                    )
+                    profile = cur.fetchone()
+                if profile:
+                    if not data.get("bac") and profile.get("type_bac"):
+                        data["bac"] = profile["type_bac"]
+                    if not data.get("moyenne") and profile.get("note_bac") is not None:
+                        data["moyenne"] = float(profile["note_bac"])
+                    if not data.get("ville") and profile.get("ville"):
+                        data["ville"] = profile["ville"]
+                    print(f"[/predict] profile prefill: bac={data.get('bac')} moy={data.get('moyenne')} ville={data.get('ville')}")
+            except Exception as pe:
+                print(f"[/predict] profile fetch error: {pe}")
+            finally:
+                release_conn(conn)
+
         print(f"[/predict] domaine={data.get('domaine')} carriere={data.get('carriere')} moyenne={data.get('moyenne')}")
 
         recs = recommend_schools(data, top_n=3)
@@ -684,18 +740,7 @@ def predict():
                 "duration":         school.get("duration", ""),
             })
 
-        # ── Optional auth: save result if user is logged in ───────────────────
-        user_id = None
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            try:
-                token = auth_header.split(" ", 1)[1].strip()
-                payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=[Config.JWT_ALGORITHM])
-                if payload.get("type") == "access":
-                    user_id = payload.get("sub")
-            except Exception:
-                pass
-
+        # ── Save result for authenticated users ──────────────────────────────
         if user_id and results:
             try:
                 top = results[0]
