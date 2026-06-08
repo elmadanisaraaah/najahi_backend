@@ -4,6 +4,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
 from extensions import mail
+from db import get_conn, release_conn
 from routes.auth import auth_bp
 from routes.profile import profile_bp
 from routes.profile_photo import profile_bp as photo_profile_bp
@@ -16,9 +17,26 @@ from routes.servers import servers_bp
 from routes.socket_events import register_socket_events
 from routes.rooms import rooms_bp
 
+def run_schema():
+    schema_path = os.path.join(os.path.dirname(__file__), "models_sql", "auth_schema.sql")
+    with open(schema_path, "r", encoding="utf-8") as f:
+        sql = f.read()
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"[schema] warning: {e}")
+    finally:
+        release_conn(conn)
+
 app = Flask(__name__)
 app.config.from_object(Config)
 mail.init_app(app)
+
+run_schema()
 
 CORS(app, resources={r"/api/*": {
     "origins": ["https://najahi-frontend.vercel.app", "http://localhost:5173", "*"],
