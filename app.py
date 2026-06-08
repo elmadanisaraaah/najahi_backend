@@ -20,19 +20,15 @@ app = Flask(__name__)
 app.config.from_object(Config)
 mail.init_app(app)
 
-allowed_origins = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-
-CORS(
-    app,
-    resources={r"/api/*": {"origins": allowed_origins}},
-    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["Content-Type", "Authorization"],
-    supports_credentials=True
-)
+CORS(app, resources={r"/api/*": {
+    "origins": ["https://najahi-frontend.vercel.app", "http://localhost:5173", "*"],
+    "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"]
+}})
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins=allowed_origins,
+    cors_allowed_origins="*",
     async_mode="threading"
 )
 
