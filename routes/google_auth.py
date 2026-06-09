@@ -98,14 +98,21 @@ def google_callback():
             """, (user["id"], nom or None, prenom or None))
 
         else:
-            # Update google_id and avatar if missing
-            cur.execute("""
-                UPDATE users SET google_id = COALESCE(google_id, %s),
-                avatar_url = COALESCE(avatar_url, %s),
-                is_email_verified = TRUE,
-                updated_at = NOW()
-                WHERE id = %s
-            """, (google_id, avatar, user["id"]))
+            # Update google_id and avatar if columns exist, else just verify email
+            try:
+                cur.execute("""
+                    UPDATE users SET google_id = COALESCE(google_id, %s),
+                    avatar_url = COALESCE(avatar_url, %s),
+                    is_email_verified = TRUE,
+                    updated_at = NOW()
+                    WHERE id = %s
+                """, (google_id, avatar, user["id"]))
+            except Exception:
+                conn.rollback()
+                cur.execute("""
+                    UPDATE users SET is_email_verified = TRUE, updated_at = NOW()
+                    WHERE id = %s
+                """, (user["id"],))
 
         # Create session
         jwt_token = create_access_token(user["id"], user["email"], user["role"])
@@ -136,7 +143,8 @@ def google_callback():
 
     except Exception as e:
         conn.rollback()
-        return redirect(f"{Config.FRONTEND_URL}/login?error={str(e)}")
+        error_msg = str(e).replace('\n', ' ').replace('\r', ' ')[:100]
+        return redirect(f"{Config.FRONTEND_URL}/login?error={error_msg}")
     finally:
         cur.close()
         release_conn(conn)
