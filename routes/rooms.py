@@ -148,7 +148,11 @@ def join_room():
 def get_room(room_id):
     user = get_user_from_token()
     if not user:
+        print(f"GET ROOM 401: unauthenticated request for room_id={room_id}")
         return jsonify({"error": "Non autorisé"}), 401
+
+    user_id = user.get("sub") or user.get("user_id") or user.get("id")
+    print(f"GET ROOM: room_id={room_id} user_id={user_id}")
 
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
@@ -160,6 +164,7 @@ def get_room(room_id):
         room = cur.fetchone()
 
         if not room:
+            print(f"GET ROOM 404: room_id={room_id} not found")
             return jsonify({"error": "Salle introuvable"}), 404
 
         cur.execute("""
@@ -170,6 +175,7 @@ def get_room(room_id):
             WHERE m.room_id = %s
         """, (room["id"],))
         members = cur.fetchall()
+        print(f"GET ROOM 200: room_id={room_id} name={room['name']} members={len(members)}")
 
         return jsonify({
             "room": {
@@ -192,7 +198,7 @@ def get_room(room_id):
         }), 200
 
     except Exception as e:
-        print("GET ROOM ERROR:", str(e))
+        print(f"GET ROOM 500: room_id={room_id} error={str(e)}")
         return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
     finally:
         cur.close(); release_conn(conn)
