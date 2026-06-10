@@ -17,7 +17,7 @@ from config import Config
 
 auth_bp = Blueprint("auth", __name__)
 
-RECAPTCHA_SECRET = os.environ.get("RECAPTCHA_SECRET_KEY", "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe")
+RECAPTCHA_SECRET = os.environ.get("RECAPTCHA_SECRET_KEY", "6LcNABgtAAAAADD_n98GlHDQN_o9jy2DEWAQWVOW")
 
 def verify_recaptcha(token):
     if not token:
