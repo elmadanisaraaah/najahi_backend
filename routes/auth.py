@@ -1,3 +1,4 @@
+import traceback
 from flask import Blueprint, request, jsonify
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
@@ -269,7 +270,12 @@ def login():
 @auth_bp.route("/refresh", methods=["POST"])
 def refresh():
     data          = get_json()
+    # Accept token from JSON body or Authorization: Bearer header
     refresh_token = data.get("refresh_token") or ""
+    if not refresh_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            refresh_token = auth_header.split(" ", 1)[1].strip()
     if not refresh_token:
         return jsonify({"error": "Refresh token requis"}), 400
 
@@ -330,6 +336,7 @@ def refresh():
 
     except Exception as e:
         conn.rollback()
+        print("REFRESH ERROR:", traceback.format_exc())
         return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
     finally:
         cur.close(); release_conn(conn)
