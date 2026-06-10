@@ -527,7 +527,7 @@ def score_school(school, data):
     eng_traits  = {"analytique", "curieux", "logique", "rigoureux"}
     biz_traits  = {"leader", "ambitieux", "charismatique", "communicant"}
     med_traits  = {"empathique", "altruiste", "patient", "serviable"}
-    art_traits  = {"créatif", "creatif", "artistique", "imaginatif"}
+    art_traits  = {"creatif", "artistique", "imaginatif"}
 
     if school["type"] in ("engineering", "preparatoire") and any(t in eng_traits for t in personality_lower):
         score += 10
@@ -537,6 +537,110 @@ def score_school(school, data):
         score += 10
     elif school["type"] == "architecture" and any(t in art_traits for t in personality_lower):
         score += 10
+
+    # ── 8. NEW QUESTION BONUSES ─────────────────────────────────────────────
+
+    matiere_forte     = data.get("matiere_forte", "")
+    duree_etudes      = data.get("duree_etudes", "")
+    etudier_etranger  = data.get("etudier_etranger", "")
+    secteur_travail   = data.get("secteur_travail", "")
+    niveau_tech       = data.get("niveau_tech", "")
+    niveau_maths_auto = data.get("niveau_maths_auto", "")
+
+    MATIERE_BOOST = {
+        "maths":        ["emi", "ensias", "inpt", "ehtp", "ensa", "cpge", "um6p"],
+        "physique":     ["emi", "ensias", "ehtp", "ensa", "cpge", "emsi"],
+        "chimie":       ["ensa", "um6p", "emi"],
+        "bio":          ["medecine", "um6p"],
+        "informatique": ["ensias", "inpt", "emsi", "uir"],
+        "langues":      ["fsjes", "architecture", "hem"],
+        "eco":          ["encg", "iscae", "hem"],
+        "histoire":     ["fsjes"],
+    }
+    if matiere_forte and school["id"] in MATIERE_BOOST.get(matiere_forte, []):
+        score += 10
+
+    if duree_etudes == "2ans_bts":
+        if school.get("type") == "university" and school["id"] == "fsjes":
+            score += 8
+    elif duree_etudes == "3ans_licence":
+        if school.get("type") == "university":
+            score += 10
+    elif duree_etudes == "5ans_ing":
+        if school.get("type") in ("engineering", "preparatoire", "business"):
+            score += 10
+    elif duree_etudes == "7ans_med":
+        if school["id"] == "medecine":
+            score += 20
+        elif school.get("type") != "health":
+            score -= 5
+
+    if etudier_etranger in ("oui", "peut_etre"):
+        if school["id"] in ("uir", "um6p"):
+            score += 12
+        elif school.get("budget") == "prive":
+            score += 5
+    elif etudier_etranger == "non":
+        if school.get("budget") in ("public", "semi_public"):
+            score += 5
+
+    if secteur_travail == "public":
+        if school.get("budget") in ("public", "semi_public"):
+            score += 12
+        elif school.get("budget") == "prive":
+            score -= 6
+    elif secteur_travail == "prive":
+        if school.get("budget") == "prive":
+            score += 8
+    elif secteur_travail == "entrepreneuriat":
+        if school["id"] in ("hem", "encg", "uir", "iscae", "emsi"):
+            score += 10
+    elif secteur_travail == "international":
+        if school["id"] in ("uir", "um6p", "hem"):
+            score += 12
+
+    if niveau_tech == "passionne":
+        if school.get("type") == "engineering" or school["id"] in ("ensias", "inpt", "emsi", "uir", "um6p"):
+            score += 10
+        elif school.get("type") in ("health", "university"):
+            score -= 5
+    elif niveau_tech == "pas_trop":
+        if school.get("type") in ("health", "university"):
+            score += 5
+        elif school["id"] in ("ensias", "inpt"):
+            score -= 5
+
+    MATHS_LEVEL_MAP = {"excellent": 17.0, "bon": 14.5, "moyen": 11.0, "faible": 8.0}
+    if niveau_maths_auto in MATHS_LEVEL_MAP:
+        implied = MATHS_LEVEL_MAP[niveau_maths_auto]
+        if implied >= school["moyenne_min"]:
+            score += 5
+        elif implied < school["moyenne_min"] - 2.5:
+            score -= 8
+
+    # ── 9. EXPLICIT LOGICAL OVERRIDES ──────────────────────────────────────
+
+    if bac_key == "sciences_maths" and moyenne >= 17.0:
+        if school["id"] in ("cpge", "emi", "ensias", "um6p"):
+            score += 25
+    elif bac_key == "sciences_maths" and moyenne >= 15.0:
+        if school["id"] in ("ensa", "ensias", "emi", "inpt", "ehtp"):
+            score += 18
+
+    if bac_key == "sciences_economiques" and domaine == "business":
+        if school["id"] in ("encg", "iscae", "hem"):
+            score += 22
+
+    if bac_key == "sciences_biologiques" and domaine == "sante":
+        if school["id"] == "medecine":
+            score += 30
+
+    if budget == "public" and school.get("budget") == "prive":
+        score -= 15
+
+    if budget in ("prive_premium", "prive_abordable") and etudier_etranger in ("oui", "peut_etre"):
+        if school["id"] in ("uir", "um6p"):
+            score += 15
 
     return score
 
@@ -675,24 +779,33 @@ def predict():
             except Exception:
                 pass
 
-        # ── Fill missing bac/moyenne/ville from student profile ──────────────
-        if user_id and (not data.get("bac") or not data.get("moyenne") or not data.get("ville")):
+        # ── Fill from student profile (always fetch for full scoring context) ──
+        if user_id:
             conn = get_conn()
             try:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute(
-                        "SELECT type_bac, note_bac, ville FROM student_profiles WHERE user_id = %s LIMIT 1",
+                        """SELECT type_bac, note_bac, ville, filiere, moyenne_generale, niveau
+                           FROM student_profiles WHERE user_id = %s LIMIT 1""",
                         (user_id,)
                     )
                     profile = cur.fetchone()
                 if profile:
-                    if not data.get("bac") and profile.get("type_bac"):
-                        data["bac"] = profile["type_bac"]
-                    if not data.get("moyenne") and profile.get("note_bac") is not None:
-                        data["moyenne"] = float(profile["note_bac"])
+                    if not data.get("bac"):
+                        if profile.get("type_bac"):
+                            data["bac"] = profile["type_bac"]
+                        elif profile.get("niveau"):
+                            data["bac"] = profile["niveau"]
+                    if not data.get("moyenne"):
+                        if profile.get("note_bac") is not None:
+                            data["moyenne"] = float(profile["note_bac"])
+                        elif profile.get("moyenne_generale") is not None:
+                            data["moyenne"] = float(profile["moyenne_generale"])
                     if not data.get("ville") and profile.get("ville"):
                         data["ville"] = profile["ville"]
-                    print(f"[/predict] profile prefill: bac={data.get('bac')} moy={data.get('moyenne')} ville={data.get('ville')}")
+                    if profile.get("filiere"):
+                        data["filiere"] = profile["filiere"]
+                    print(f"[/predict] profile: bac={data.get('bac')} moy={data.get('moyenne')} ville={data.get('ville')} filiere={data.get('filiere')}")
             except Exception as pe:
                 print(f"[/predict] profile fetch error: {pe}")
             finally:

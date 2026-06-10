@@ -204,6 +204,53 @@ def get_room(room_id):
         cur.close(); release_conn(conn)
 
 
+@rooms_bp.route("/my-rooms", methods=["GET"])
+def my_rooms():
+    user = get_user_from_token()
+    if not user:
+        return jsonify({"error": "Non autorisé"}), 401
+
+    user_id = user.get("sub") or user.get("user_id") or user.get("id")
+
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT r.id, r.name, r.code, r.total_minutes, r.max_participants,
+                   r.is_active, r.created_at, r.host_id,
+                   COUNT(m2.user_id) AS participant_count
+            FROM private_rooms r
+            JOIN private_room_members m ON m.room_id = r.id AND m.user_id = %s
+            LEFT JOIN private_room_members m2 ON m2.room_id = r.id
+            GROUP BY r.id, r.name, r.code, r.total_minutes, r.max_participants,
+                     r.is_active, r.created_at, r.host_id
+            ORDER BY r.created_at DESC
+            LIMIT 20
+        """, (user_id,))
+        rooms = cur.fetchall()
+
+        result = []
+        for r in rooms:
+            result.append({
+                "id":                str(r["id"]),
+                "name":              r["name"],
+                "code":              r["code"],
+                "total_minutes":     r["total_minutes"],
+                "max_participants":  r["max_participants"],
+                "is_active":         r["is_active"],
+                "created_at":        r["created_at"].isoformat() if r["created_at"] else None,
+                "is_host":           str(r["host_id"]) == str(user_id),
+                "participant_count": int(r["participant_count"] or 0),
+            })
+
+        return jsonify({"rooms": result}), 200
+    except Exception as e:
+        print("MY_ROOMS ERROR:", str(e))
+        return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
 @rooms_bp.route("/<room_id>/leave", methods=["POST"])
 def leave_room(room_id):
     user = get_user_from_token()

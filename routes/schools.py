@@ -1,8 +1,13 @@
 import os
+import uuid
+import jwt as pyjwt
 from dotenv import load_dotenv
 load_dotenv()
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import requests
+from db import get_conn, release_conn
+from middleware import token_required
+from config import Config
 
 schools_bp = Blueprint("schools", __name__)
 
@@ -27,6 +32,29 @@ SYSTEM_PROMPT = (
     "8. For ENCG/business: mention their own concours, note bac 14+\n"
     "9. Always mention if a school is public (free) or private (fees in MAD)"
 )
+
+
+def _ensure_schools_chat_history_table():
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS schools_chat_history (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    question TEXT NOT NULL,
+                    answer TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            conn.commit()
+    except Exception as e:
+        print(f"[schools] history table error: {e}")
+        conn.rollback()
+    finally:
+        release_conn(conn)
+
+_ensure_schools_chat_history_table()
 
 
 def call_mistral(query: str, api_key: str):
@@ -96,6 +124,37 @@ def ask_school():
                 "found": False,
             }), 200
 
+        # Save to history if authenticated
+        user_id = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                token = auth_header.split(" ", 1)[1].strip()
+                payload = pyjwt.decode(
+                    token, Config.JWT_SECRET_KEY,
+                    algorithms=[Config.JWT_ALGORITHM],
+                    options={"verify_exp": False}
+                )
+                if payload.get("type") == "access":
+                    user_id = payload.get("sub")
+            except Exception:
+                pass
+
+        if user_id:
+            conn = get_conn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO schools_chat_history (id, user_id, question, answer) VALUES (%s, %s, %s, %s)",
+                        (str(uuid.uuid4()), user_id, query, answer)
+                    )
+                conn.commit()
+            except Exception as he:
+                print(f"[/ask] history save error: {he}")
+                conn.rollback()
+            finally:
+                release_conn(conn)
+
         return jsonify({"answer": answer, "found": True}), 200
 
     except Exception as e:
@@ -104,3 +163,34 @@ def ask_school():
             "answer": "Une erreur interne s'est produite. Réessaie plus tard.",
             "found": False,
         }), 200
+
+
+@schools_bp.route("/my-history", methods=["GET"])
+@token_required
+def my_history():
+    user_id = str(g.current_user["id"])
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT question, created_at
+                FROM schools_chat_history
+                WHERE user_id = %s
+                ORDER BY created_at DESC
+                LIMIT 10
+            """, (user_id,))
+            rows = cur.fetchall()
+
+        history = [
+            {
+                "question":   r[0],
+                "created_at": r[1].isoformat() if r[1] else None,
+            }
+            for r in rows
+        ]
+        return jsonify({"history": history}), 200
+    except Exception as e:
+        print(f"[/my-history] error: {e}")
+        return jsonify({"history": [], "error": str(e)}), 200
+    finally:
+        release_conn(conn)
