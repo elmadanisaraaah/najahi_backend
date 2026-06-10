@@ -1,13 +1,18 @@
 import os
-import uuid
+import io
+import cloudinary
+import cloudinary.uploader
 from flask import Blueprint, request, jsonify, g
 from db import get_conn, release_conn
 from middleware import token_required
 
-profile_bp = Blueprint('profile_photo', __name__, url_prefix='/api/profile')
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET"),
+)
 
-AVATAR_DIR = os.getenv('AVATAR_DIR', 'uploads/avatars')
-os.makedirs(AVATAR_DIR, exist_ok=True)
+profile_bp = Blueprint('profile_photo', __name__, url_prefix='/api/profile')
 
 
 @profile_bp.route('/avatar', methods=['POST'])
@@ -30,14 +35,16 @@ def upload_avatar():
 
     user_id = user["id"]
 
-    ext = file.filename.rsplit('.', 1)[-1].lower()
-    filename = f"{user_id}_{uuid.uuid4().hex[:6]}.{ext}"
-    filepath = os.path.join(AVATAR_DIR, filename)
-
-    with open(filepath, 'wb') as f:
-        f.write(content)
-
-    avatar_url = f"/uploads/avatars/{filename}"
+    try:
+        result = cloudinary.uploader.upload(
+            io.BytesIO(content),
+            folder="najahi/avatars",
+            public_id=str(user_id),
+            overwrite=True,
+        )
+        avatar_url = result["secure_url"]
+    except Exception as e:
+        return jsonify({'error': f'Erreur Cloudinary: {str(e)}'}), 500
 
     conn = get_conn()
     cur = conn.cursor()
