@@ -275,14 +275,16 @@ def get_activity():
             conn.rollback()
 
         # Sort combined list and take top 40
-        def normalize_ts(ts):
+        def safe_ts(e):
+            ts = e.get("ts")
             if ts is None:
                 return ""
             if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                return ts.replace(tzinfo=None)
+                from datetime import timezone
+                return ts.astimezone(timezone.utc).replace(tzinfo=None)
             return ts
 
-        events.sort(key=lambda e: normalize_ts(e["ts"]) or "", reverse=True)
+        events.sort(key=safe_ts, reverse=True)
         for e in events:
             if e["ts"]:
                 e["ts"] = e["ts"].isoformat()

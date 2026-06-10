@@ -68,7 +68,7 @@ def call_mistral(query: str, api_key: str):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": query},
         ],
-        "max_tokens": 2000,
+        "max_tokens": 1000,
     }
     try:
         res = requests.post(MISTRAL_API_URL, headers=headers, json=body, timeout=30)
