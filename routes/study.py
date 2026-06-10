@@ -3,6 +3,23 @@ from flask import Blueprint, request, jsonify, g
 from db import get_conn, release_conn
 from middleware import token_required
 
+_SOLO_TABLE_CREATED = False
+
+def _ensure_solo_table(cur):
+    global _SOLO_TABLE_CREATED
+    if _SOLO_TABLE_CREATED:
+        return
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS solo_study_sessions (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            ended_at TIMESTAMPTZ,
+            duration_minutes NUMERIC(6,2)
+        )
+    ''')
+    _SOLO_TABLE_CREATED = True
+
 study_bp = Blueprint('study', __name__, url_prefix='/api/study')
 
 
@@ -194,6 +211,89 @@ def leave_room(room_id):
         return jsonify({'ok': True}), 200
     except Exception as e:
         conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/study/solo/start ───────────────────────────────────────────────
+@study_bp.route('/solo/start', methods=['POST'])
+@token_required
+def solo_start():
+    user_id = g.current_user["id"]
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        _ensure_solo_table(cur)
+        session_id = str(uuid.uuid4())
+        cur.execute(
+            'INSERT INTO solo_study_sessions (id, user_id) VALUES (%s, %s)',
+            (session_id, user_id)
+        )
+        conn.commit()
+        return jsonify({'session_id': session_id}), 201
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/study/solo/end ─────────────────────────────────────────────────
+@study_bp.route('/solo/end', methods=['POST'])
+@token_required
+def solo_end():
+    data = request.get_json(silent=True) or {}
+    session_id = data.get('session_id')
+    duration_minutes = data.get('duration_minutes', 0)
+    if not session_id:
+        return jsonify({'error': 'session_id requis'}), 400
+    user_id = g.current_user["id"]
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE solo_study_sessions
+            SET ended_at = NOW(), duration_minutes = %s
+            WHERE id = %s AND user_id = %s AND ended_at IS NULL
+        ''', (float(duration_minutes), session_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── GET /api/study/solo/stats ────────────────────────────────────────────────
+@study_bp.route('/solo/stats', methods=['GET'])
+@token_required
+def solo_stats():
+    user_id = g.current_user["id"]
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        _ensure_solo_table(cur)
+        conn.commit()
+        cur.execute('''
+            SELECT
+                COALESCE(SUM(duration_minutes), 0) AS total_minutes,
+                COUNT(*) FILTER (WHERE ended_at IS NOT NULL) AS total_sessions,
+                MAX(ended_at) AS last_session
+            FROM solo_study_sessions
+            WHERE user_id = %s
+        ''', (user_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'total_hours': 0, 'total_sessions': 0, 'last_session': None}), 200
+        total_minutes, total_sessions, last_session = row
+        return jsonify({
+            'total_hours': round(float(total_minutes) / 60, 1),
+            'total_sessions': int(total_sessions),
+            'last_session': last_session.isoformat() if last_session else None,
+        }), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
         cur.close(); release_conn(conn)
