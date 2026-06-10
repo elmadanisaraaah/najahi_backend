@@ -93,8 +93,10 @@ def register():
 
         try:
             send_verification_email(email, verification_code)
-        except Exception as e:
-            print("VERIFICATION EMAIL ERROR:", e)
+            print("Verification email sent to", email)
+        except Exception as email_err:
+            print("EMAIL ERROR (non-fatal):", str(email_err))
+            # Continue anyway - token is saved
 
         return jsonify({
             "message": "Compte créé. Vérifiez votre email avec le code envoyé.",
@@ -388,9 +390,10 @@ def forgot_password():
             conn.commit()
             try:
                 send_reset_password_email(user["email"], raw_reset_token)
-            except Exception as e:
-                print("EMAIL ERROR:", e)
-                return jsonify({"error": f"Erreur envoi email: {str(e)}"}), 500
+                print("Reset email sent to", email)
+            except Exception as email_err:
+                print("EMAIL ERROR (non-fatal):", str(email_err))
+                # Continue anyway - token is saved
 
         return jsonify({
             "message": "Si un compte existe avec cet email, un lien a été envoyé."
