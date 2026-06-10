@@ -398,7 +398,7 @@ def forgot_password():
 
     except Exception as e:
         conn.rollback()
-        print("FORGOT PASSWORD ERROR:", str(e))
+        print("FORGOT PASSWORD ERROR:", traceback.format_exc())
         return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
     finally:
         cur.close(); release_conn(conn)
