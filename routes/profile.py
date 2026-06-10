@@ -60,7 +60,7 @@ def get_me():
                        p.prenom, p.nom, p.telephone, p.date_naissance,
                        p.ville, p.niveau, p.filiere_actuelle,
                        p.etablissement, p.annee_scolaire, p.moyenne_generale,
-                       p.avatar_url
+                       p.avatar_url, p.type_bac, p.note_bac
                 FROM users u
                 LEFT JOIN student_profiles p ON p.user_id = u.id
                 WHERE u.id = %s
@@ -84,10 +84,13 @@ def get_me():
             "ville":            row[8] or "",
             "niveau":           row[9] or "",
             "filiere_actuelle": row[10] or "",
+            "filiere":          row[10] or "",
             "etablissement":    row[11] or "",
             "annee_scolaire":   row[12] or "",
             "moyenne_generale": float(row[13]) if row[13] is not None else None,
             "avatar_url":       row[14] or None,
+            "type_bac":         row[15] or "",
+            "note_bac":         float(row[16]) if row[16] is not None else None,
         }), 200
 
     except Exception as e:
@@ -108,6 +111,7 @@ def update_me():
         "prenom", "nom", "telephone", "date_naissance",
         "ville", "niveau", "filiere_actuelle",
         "etablissement", "annee_scolaire", "moyenne_generale",
+        "type_bac", "note_bac",
     ]
     fields = {k: data[k] for k in allowed if k in data}
 

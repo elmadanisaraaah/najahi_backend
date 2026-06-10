@@ -21,8 +21,8 @@ def upload_avatar():
         return jsonify({'error': 'Format non supporté (JPG, PNG, WEBP)'}), 400
 
     content = file.read()
-    if len(content) > 2 * 1024 * 1024:
-        return jsonify({'error': 'Image trop grande (max 2 MB)'}), 400
+    if len(content) > 10 * 1024 * 1024:
+        return jsonify({'error': 'Image trop grande (max 10 MB)'}), 400
 
     user = getattr(g, "current_user", None)
     if not user:

@@ -194,7 +194,7 @@ SCHOOLS_DB = [
         "secondary_domaines": ["droit_sciences_sociales"],
         "careers": ["manager", "economiste", "entrepreneur", "analyste_financier"],
         "bac_types": ["sciences_economiques", "sciences_maths", "sciences_physiques"],
-        "moyenne_min": 15.0,
+        "moyenne_min": 16.0,
         "concours": True,
         "description": "Grande école de management et d'administration des affaires",
         "career_paths": ["Directeur financier", "Auditeur", "Consultant stratégie", "DG / PDG"],
@@ -211,7 +211,7 @@ SCHOOLS_DB = [
         "secondary_domaines": ["sciences"],
         "careers": ["medecin", "paramedical", "chercheur", "scientifique_chercheur"],
         "bac_types": ["sciences_biologiques", "sciences_physiques"],
-        "moyenne_min": 17.5,
+        "moyenne_min": 17.0,
         "concours": True,
         "description": "La voie royale pour devenir médecin, pharmacien ou dentiste",
         "career_paths": ["Médecin généraliste", "Spécialiste", "Pharmacien", "Chirurgien-dentiste", "Chercheur médical"],
@@ -229,7 +229,7 @@ SCHOOLS_DB = [
         "careers": ["data_ia", "chercheur", "ingenieur_dev", "ingenieur_btp",
                     "environnementaliste", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 16.0,
+        "moyenne_min": 15.0,
         "concours": True,
         "description": "Université d'excellence africaine avec bourses disponibles",
         "career_paths": ["Chercheur en IA", "Ingénieur agronome", "Data Scientist", "Ingénieur mines", "Chef de projet R&D"],
@@ -247,7 +247,7 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "architecte_designer", "manager", "medecin",
                     "telecoms_cyber", "data_ia", "product_ux", "ingenieur_logiciel"],
         "bac_types": ["sciences_maths", "sciences_physiques", "sciences_economiques", "lettres"],
-        "moyenne_min": 13.0,
+        "moyenne_min": 12.0,
         "concours": False,
         "description": "Université privée internationale avec partenariats mondiaux",
         "career_paths": ["Ingénieur aéronautique", "Architecte", "Manager international", "Avocat d'affaires"],
@@ -318,7 +318,7 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "chercheur", "ingenieur_btp", "data_ia",
                     "ingenieur_logiciel", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 16.5,
+        "moyenne_min": 17.0,
         "concours": False,
         "description": "2 ans intenses pour intégrer EMI, ENSIAS, ENSA via concours",
         "career_paths": ["Ingénieur (après grande école)", "Chercheur", "Directeur technique"],
@@ -405,26 +405,32 @@ def score_school(school, data):
 
     # ── HARD EXCLUSIONS (return -999 immediately) ──────────────────────────
 
-    # Médecine: strictly for sante/sciences + right bac
+    # Médecine: requires SVT bac AND note_bac >= 17, sante/sciences domain, right career
     if school["id"] == "medecine":
         if domaine not in ("sante", "sciences"):
             return -999
-        if bac_key == "bts_dut":
+        if bac_key != "sciences_biologiques":
+            return -999
+        if moyenne < 17.0:
             return -999
         if carriere not in ("medecin", "paramedical", "chercheur", "scientifique_chercheur"):
             return -999
 
-    # CPGE: only for high-achievers, not BTS/DUT, not business/health/arts
+    # CPGE: requires note_bac >= 17, Sciences Maths/Physiques only, no BTS/DUT
     if school["id"] == "cpge":
         if bac_key == "bts_dut":
             return -999
-        if moyenne < 16.0:
+        if moyenne < 17.0:
             return -999
         if domaine in ("sante", "business", "arts_design", "droit_sciences_sociales",
                        "communication", "education", "tourisme"):
             return -999
         if bac_key not in ("sciences_maths", "sciences_physiques", None):
             return -999
+
+    # Hard minimum grade check: below minimum → never recommend
+    if moyenne < school["moyenne_min"]:
+        return -999
 
     # Architecture: only for arts_design/ingenierie
     if school["id"] == "architecture":
@@ -473,11 +479,7 @@ def score_school(school, data):
             score -= 20
 
     # ── 3. GRADES (20 pts) ─────────────────────────────────────────────────
-    if moyenne >= school["moyenne_min"]:
-        score += min(20, int((moyenne - school["moyenne_min"]) * 5))
-    else:
-        deficit = school["moyenne_min"] - moyenne
-        score -= int(deficit * 10)
+    score += min(20, int((moyenne - school["moyenne_min"]) * 5))
 
     # ── 4. BAC TYPE (part of 20%) ──────────────────────────────────────────
     if bac_key and bac_key != "bts_dut":
