@@ -1,2 +1,5 @@
 [phases.setup]
 nixPkgs = ["postgresql"]
+
+[variables]
+PYTHON_VERSION = "3.13.13"
