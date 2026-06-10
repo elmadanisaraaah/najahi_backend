@@ -271,6 +271,7 @@ def get_activity():
             """)
             events += [dict(r) for r in cur.fetchall()]
         except Exception:
+            print("ADMIN ACTIVITY (orientations) ERROR:", traceback.format_exc())
             conn.rollback()
 
         # Sort combined list and take top 40
