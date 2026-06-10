@@ -17,6 +17,7 @@ from routes.servers import servers_bp
 from routes.socket_events import register_socket_events
 from routes.rooms import rooms_bp
 from routes.admin import admin_bp
+from routes.forum import forum_bp
 
 def run_schema():
     schema_path = os.path.join(os.path.dirname(__file__), "models_sql", "auth_schema.sql")
@@ -63,6 +64,7 @@ app.register_blueprint(google_auth_bp,  url_prefix="/api/auth")
 app.register_blueprint(servers_bp,      url_prefix="/api/servers")
 app.register_blueprint(rooms_bp,  url_prefix="/api/rooms")
 app.register_blueprint(admin_bp,  url_prefix="/api/admin")
+app.register_blueprint(forum_bp,  url_prefix="/api/forum")
 
 register_socket_events(socketio)
 
