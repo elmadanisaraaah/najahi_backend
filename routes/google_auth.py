@@ -62,10 +62,11 @@ def google_callback():
         return redirect(f"{Config.FRONTEND_URL}/login?error=userinfo_failed")
 
     userinfo = userinfo_res.json()
-    email    = userinfo.get("email", "").lower()
-    prenom   = userinfo.get("given_name", "")
-    nom      = userinfo.get("family_name", "")
-    avatar   = userinfo.get("picture", "")
+    email     = userinfo.get("email", "").lower()
+    full_name = userinfo.get("name", "")
+    prenom    = userinfo.get("given_name") or (full_name.split()[0] if full_name else "")
+    nom       = userinfo.get("family_name") or ""
+    avatar    = userinfo.get("picture", "")
     google_id = userinfo.get("sub", "")
 
     if not email:
