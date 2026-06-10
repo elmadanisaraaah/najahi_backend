@@ -275,7 +275,14 @@ def get_activity():
             conn.rollback()
 
         # Sort combined list and take top 40
-        events.sort(key=lambda e: e["ts"] or "", reverse=True)
+        def normalize_ts(ts):
+            if ts is None:
+                return ""
+            if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                return ts.replace(tzinfo=None)
+            return ts
+
+        events.sort(key=lambda e: normalize_ts(e["ts"]) or "", reverse=True)
         for e in events:
             if e["ts"]:
                 e["ts"] = e["ts"].isoformat()
