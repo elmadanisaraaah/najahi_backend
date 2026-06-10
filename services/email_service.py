@@ -1,6 +1,31 @@
-from flask_mail import Message
+import os
+import requests
 from config import Config
-from extensions import mail
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_Rn14ut3y_D7eyTUFREsCngpPuh9LTAKjW")
+
+
+def send_email(to_email, subject, html_content):
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "from": "Najahi <onboarding@resend.dev>",
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content
+            }
+        )
+        print("RESEND STATUS:", response.status_code)
+        print("RESEND RESPONSE:", response.text)
+        return response.status_code == 200
+    except Exception as e:
+        print("RESEND ERROR:", str(e))
+        return False
 
 
 def _html_wrapper(title: str, content: str) -> str:
@@ -83,13 +108,11 @@ def send_verification_email(to_email: str, code: str):
         Ce code est valable une seule fois.<br/>Ne le partage avec personne.
       </p>
     """
-    msg = Message(
-        subject="Najahi — Vérifie ton adresse email",
-        recipients=[to_email],
-        html=_html_wrapper("Vérification email", content),
-        body=f"Ton code de vérification Najahi est : {code}\nIl expire dans 15 minutes."
+    send_email(
+        to_email,
+        "Najahi — Vérifie ton adresse email",
+        _html_wrapper("Vérification email", content)
     )
-    mail.send(msg)
 
 
 def send_reset_password_email(to_email: str, reset_token: str):
@@ -124,10 +147,8 @@ def send_reset_password_email(to_email: str, reset_token: str):
         </p>
       </div>
     """
-    msg = Message(
-        subject="Najahi — Réinitialisation de ton mot de passe",
-        recipients=[to_email],
-        html=_html_wrapper("Réinitialisation mot de passe", content),
-        body=f"Réinitialise ton mot de passe Najahi ici : {reset_link}\nCe lien expire dans 30 minutes."
+    send_email(
+        to_email,
+        "Najahi — Réinitialisation de ton mot de passe",
+        _html_wrapper("Réinitialisation mot de passe", content)
     )
-    mail.send(msg)
