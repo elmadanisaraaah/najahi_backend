@@ -2,30 +2,26 @@ import os
 import requests
 from config import Config
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "re_Rn14ut3y_D7eyTUFREsCngpPuh9LTAKjW")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 
 
 def send_email(to_email, subject, html_content):
-    try:
-        response = requests.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {RESEND_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "from": "Najahi <onboarding@resend.dev>",
-                "to": [to_email],
-                "subject": subject,
-                "html": html_content
-            }
-        )
-        print("RESEND STATUS:", response.status_code)
-        print("RESEND RESPONSE:", response.text)
-        return response.status_code == 200
-    except Exception as e:
-        print("RESEND ERROR:", str(e))
-        return False
+    response = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "api-key": BREVO_API_KEY,
+            "Content-Type": "application/json"
+        },
+        json={
+            "sender": {"name": "Najahi", "email": "saraelmadanijop@gmail.com"},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_content
+        }
+    )
+    print("BREVO STATUS:", response.status_code)
+    print("BREVO RESPONSE:", response.text)
+    return response.status_code == 201
 
 
 def _html_wrapper(title: str, content: str) -> str:
