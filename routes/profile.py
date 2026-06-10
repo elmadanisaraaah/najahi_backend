@@ -1,5 +1,6 @@
 import os
 import uuid
+import traceback
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Blueprint, request, jsonify, g, send_file
@@ -90,6 +91,7 @@ def get_me():
         }), 200
 
     except Exception as e:
+        print("PROFILE ME ERROR:", traceback.format_exc())
         return jsonify({"error": str(e)}), 500
     finally:
         release_conn(conn)
