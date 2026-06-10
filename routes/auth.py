@@ -24,7 +24,7 @@ _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 def verify_recaptcha(token):
     if not token:
-        return False
+        return True  # Don't block if no token
     try:
         res = http_requests.post(
             "https://www.google.com/recaptcha/api/siteverify",
@@ -32,9 +32,11 @@ def verify_recaptcha(token):
             timeout=5,
         )
         result = res.json()
-        return result.get("success", False) and result.get("score", 0) >= 0.5
-    except Exception:
-        return False
+        print("RECAPTCHA RESULT:", result)
+        return result.get("success", False) and result.get("score", 0) >= 0.3
+    except Exception as e:
+        print("RECAPTCHA ERROR:", str(e))
+        return True  # Don't block users if reCAPTCHA is down
 
 def _validate(email=None, password=None, nom=None, prenom=None):
     if email is not None:
