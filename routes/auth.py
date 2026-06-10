@@ -1,5 +1,6 @@
 import traceback
 from flask import Blueprint, request, jsonify
+from extensions import limiter
 from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from db import get_conn, release_conn
@@ -22,6 +23,7 @@ def utcnow():
 
 
 @auth_bp.route("/register", methods=["POST"])
+@limiter.limit("3 per minute")
 def register():
     data       = get_json()
     email      = (data.get("email") or "").strip().lower()
@@ -219,6 +221,7 @@ def resend_verification():
 
 
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     data     = get_json()
     email    = (data.get("email") or "").strip().lower()
@@ -369,6 +372,7 @@ def logout():
 
 
 @auth_bp.route("/forgot-password", methods=["POST"])
+@limiter.limit("3 per hour")
 def forgot_password():
     data  = get_json()
     email = (data.get("email") or "").strip().lower()

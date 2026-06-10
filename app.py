@@ -3,7 +3,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from config import Config
-from extensions import mail
+from extensions import mail, limiter
 from db import get_conn, release_conn
 from routes.auth import auth_bp
 from routes.profile import profile_bp
@@ -35,6 +35,7 @@ def run_schema():
 app = Flask(__name__)
 app.config.from_object(Config)
 mail.init_app(app)
+limiter.init_app(app)
 
 run_schema()
 
@@ -62,6 +63,15 @@ app.register_blueprint(servers_bp,      url_prefix="/api/servers")
 app.register_blueprint(rooms_bp, url_prefix="/api/rooms")
 
 register_socket_events(socketio)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    return response
 
 @app.route("/api/health")
 def health():
