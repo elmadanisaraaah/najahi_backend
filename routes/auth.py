@@ -1,4 +1,5 @@
 import os
+import re
 import traceback
 import requests as http_requests
 from flask import Blueprint, request, jsonify
@@ -19,6 +20,8 @@ auth_bp = Blueprint("auth", __name__)
 
 RECAPTCHA_SECRET = os.environ.get("RECAPTCHA_SECRET_KEY", "6LcNABgtAAAAADD_n98GlHDQN_o9jy2DEWAQWVOW")
 
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
 def verify_recaptcha(token):
     if not token:
         return False
@@ -32,6 +35,20 @@ def verify_recaptcha(token):
         return result.get("success", False) and result.get("score", 0) >= 0.5
     except Exception:
         return False
+
+def _validate(email=None, password=None, nom=None, prenom=None):
+    if email is not None:
+        if len(email) > 254:
+            return "L'adresse email est trop longue (max 254 caractères)"
+        if email and not _EMAIL_RE.match(email):
+            return "Format d'email invalide"
+    if password is not None and len(password) > 128:
+        return "Le mot de passe est trop long (max 128 caractères)"
+    if nom is not None and len(nom) > 100:
+        return "Le nom est trop long (max 100 caractères)"
+    if prenom is not None and len(prenom) > 100:
+        return "Le prénom est trop long (max 100 caractères)"
+    return None
 
 def get_json():
     return request.get_json(silent=True) or {}
@@ -61,6 +78,9 @@ def register():
         return jsonify({"error": "Email et mot de passe requis"}), 400
     if len(password) < 8:
         return jsonify({"error": "Le mot de passe doit contenir au moins 8 caractères"}), 400
+    err = _validate(email=email, password=password, nom=nom, prenom=prenom)
+    if err:
+        return jsonify({"error": err}), 400
 
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
@@ -251,6 +271,9 @@ def login():
 
     if not email or not password:
         return jsonify({"error": "Email et mot de passe requis"}), 400
+    err = _validate(email=email, password=password)
+    if err:
+        return jsonify({"error": err}), 400
 
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
@@ -400,6 +423,9 @@ def forgot_password():
     email = (data.get("email") or "").strip().lower()
     if not email:
         return jsonify({"error": "Email requis"}), 400
+    err = _validate(email=email)
+    if err:
+        return jsonify({"error": err}), 400
 
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
