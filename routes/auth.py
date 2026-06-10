@@ -1,4 +1,6 @@
+import os
 import traceback
+import requests as http_requests
 from flask import Blueprint, request, jsonify
 from extensions import limiter
 from psycopg2.extras import RealDictCursor
@@ -15,6 +17,22 @@ from config import Config
 
 auth_bp = Blueprint("auth", __name__)
 
+RECAPTCHA_SECRET = os.environ.get("RECAPTCHA_SECRET_KEY", "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe")
+
+def verify_recaptcha(token):
+    if not token:
+        return False
+    try:
+        res = http_requests.post(
+            "https://www.google.com/recaptcha/api/siteverify",
+            data={"secret": RECAPTCHA_SECRET, "response": token},
+            timeout=5,
+        )
+        result = res.json()
+        return result.get("success", False) and result.get("score", 0) >= 0.5
+    except Exception:
+        return False
+
 def get_json():
     return request.get_json(silent=True) or {}
 
@@ -26,6 +44,8 @@ def utcnow():
 @limiter.limit("3 per minute")
 def register():
     data       = get_json()
+    if not verify_recaptcha(data.get("recaptcha_token")):
+        return jsonify({"error": "Vérification anti-bot échouée. Réessaie."}), 400
     email      = (data.get("email") or "").strip().lower()
     password   = data.get("password") or ""
     nom        = (data.get("nom") or "").strip()
@@ -224,6 +244,8 @@ def resend_verification():
 @limiter.limit("5 per minute")
 def login():
     data     = get_json()
+    if not verify_recaptcha(data.get("recaptcha_token")):
+        return jsonify({"error": "Vérification anti-bot échouée. Réessaie."}), 400
     email    = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
 
