@@ -1,3 +1,5 @@
+import json
+import os
 import traceback
 from functools import wraps
 from flask import Blueprint, request, jsonify, g
@@ -5,9 +7,16 @@ from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from middleware import token_required
 
+try:
+    from pywebpush import webpush, WebPushException
+    _WEBPUSH_AVAILABLE = True
+except ImportError:
+    _WEBPUSH_AVAILABLE = False
+
 notifications_bp = Blueprint("notifications", __name__)
 
 _READY = False
+_PUSH_READY = False
 
 
 def _ensure_table():
@@ -42,13 +51,103 @@ def _ensure_table():
         release_conn(conn)
 
 
+def _ensure_push_table():
+    global _PUSH_READY
+    if _PUSH_READY:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS push_subscriptions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    endpoint TEXT NOT NULL UNIQUE,
+                    p256dh TEXT,
+                    auth_key TEXT,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_push_subs_user_id
+                ON push_subscriptions(user_id)
+            """)
+        conn.commit()
+        _PUSH_READY = True
+    except Exception:
+        print("PUSH TABLE ERROR:", traceback.format_exc())
+        conn.rollback()
+    finally:
+        release_conn(conn)
+
+
 _ensure_table()
+_ensure_push_table()
 
 
-# ── Public helper — import this in other modules ──────────────────────────────
+# ── Public helpers — import these in other modules ────────────────────────────
+
+def send_push_to_user(user_id, title, body, link=None):
+    """Send a browser push notification to all subscriptions for a user. Never raises."""
+    if not _WEBPUSH_AVAILABLE:
+        return
+    vapid_key   = os.getenv("VAPID_PRIVATE_KEY", "")
+    vapid_email = os.getenv("VAPID_EMAIL", "mailto:contact@najahi.app")
+    if not vapid_key:
+        return
+
+    _ensure_push_table()
+    conn = get_conn()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT endpoint, p256dh, auth_key FROM push_subscriptions WHERE user_id = %s",
+                (str(user_id),)
+            )
+            subs = cur.fetchall()
+    except Exception:
+        return
+    finally:
+        release_conn(conn)
+
+    if not subs:
+        return
+
+    payload = json.dumps({"title": title, "body": body, "link": link or "/app/notifications"})
+    stale = []
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub["endpoint"],
+                    "keys": {"p256dh": sub["p256dh"], "auth": sub["auth_key"]},
+                },
+                data=payload,
+                vapid_private_key=vapid_key,
+                vapid_claims={"sub": vapid_email},
+            )
+        except Exception as ex:
+            resp = getattr(ex, "response", None)
+            if resp and resp.status_code in (404, 410):
+                stale.append(sub["endpoint"])
+            else:
+                print("PUSH SEND ERROR:", ex)
+
+    if stale:
+        conn2 = get_conn()
+        try:
+            with conn2.cursor() as cur2:
+                for ep in stale:
+                    cur2.execute("DELETE FROM push_subscriptions WHERE endpoint = %s", (ep,))
+            conn2.commit()
+        except Exception:
+            conn2.rollback()
+        finally:
+            release_conn(conn2)
+
 
 def send_notification(user_id, title, message, type="info", link=None):
-    """Fire-and-forget: insert one notification row. Never raises."""
+    """Fire-and-forget: insert one notification row + send browser push. Never raises."""
     _ensure_table()
     conn = get_conn()
     try:
@@ -66,6 +165,11 @@ def send_notification(user_id, title, message, type="info", link=None):
             pass
     finally:
         release_conn(conn)
+
+    try:
+        send_push_to_user(user_id, title, message, link)
+    except Exception:
+        pass
 
 
 def send_notification_to_all(title, message, type="info", link=None):
@@ -221,6 +325,42 @@ def delete_notification(notif_id):
         return jsonify({"ok": True}), 200
     except Exception:
         conn.rollback()
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/notifications/push-subscribe ───────────────────────────────────
+
+@notifications_bp.route("/push-subscribe", methods=["POST"])
+@token_required
+def push_subscribe():
+    _ensure_push_table()
+    user_id  = str(g.current_user["id"])
+    data     = request.get_json(silent=True) or {}
+    endpoint = (data.get("endpoint") or "").strip()
+    p256dh   = (data.get("p256dh")   or "").strip()
+    auth_key = (data.get("auth")     or "").strip()
+
+    if not endpoint:
+        return jsonify({"error": "endpoint requis"}), 400
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth_key)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (endpoint) DO UPDATE
+            SET user_id = EXCLUDED.user_id,
+                p256dh  = EXCLUDED.p256dh,
+                auth_key = EXCLUDED.auth_key
+        """, (user_id, endpoint, p256dh, auth_key))
+        conn.commit()
+        return jsonify({"ok": True}), 201
+    except Exception:
+        conn.rollback()
+        print("PUSH SUBSCRIBE ERROR:", traceback.format_exc())
         return jsonify({"error": "Erreur serveur"}), 500
     finally:
         cur.close(); release_conn(conn)
