@@ -73,6 +73,25 @@ BAC_MAP = {
     "Autre":                           None,
 }
 
+SCHOOL_WEBSITES = {
+    "emi":          "http://www.emi.ac.ma",
+    "ensias":       "http://www.ensias.um5.ac.ma",
+    "inpt":         "https://www.inpt.ac.ma",
+    "ehtp":         "http://www.ehtp.ac.ma",
+    "ensa":         "https://ensa.um5.ac.ma",
+    "encg":         "https://www.encg-settat.ac.ma",
+    "iscae":        "https://www.iscae.ac.ma",
+    "medecine":     "https://fmp.um5.ac.ma",
+    "um6p":         "https://www.um6p.ma",
+    "uir":          "https://www.uir.ac.ma",
+    "emsi":         "https://www.emsi.ma",
+    "hem":          "https://www.hem.ac.ma",
+    "architecture": "https://www.ena.ac.ma",
+    "cpge":         "https://www.men.gov.ma",
+    "fsjes":        "https://fsjes.um5.ac.ma",
+    "tourisme":     "https://www.ofppt.ma",
+}
+
 # ── Schools database ──────────────────────────────────────────────────────────
 # Each school: primary_domaines (40pt match), secondary_domaines (15pt match),
 # careers (30pt match), bac_types, moyenne_min, plus extra info.
@@ -648,7 +667,7 @@ def score_school(school, data):
     return score
 
 
-def recommend_schools(data, top_n=3):
+def recommend_schools(data, top_n=5):
     scored = []
     for school in SCHOOLS_DB:
         s = score_school(school, data)
@@ -661,7 +680,7 @@ def recommend_schools(data, top_n=3):
         valid = scored  # fallback: take whatever we have
 
     top = valid[:top_n]
-    pct_bases = [92, 78, 64]
+    pct_bases = [92, 78, 64, 54, 46]
 
     results = []
     for i, (s, sch) in enumerate(top):
@@ -816,18 +835,19 @@ def predict():
 
         print(f"[/predict] domaine={data.get('domaine')} carriere={data.get('carriere')} moyenne={data.get('moyenne')}")
 
-        recs = recommend_schools(data, top_n=3)
+        recs = recommend_schools(data, top_n=5)
         api_key = os.environ.get("GROQ_API_KEY", "")
         print(f"[/predict] GROQ key prefix={api_key[:10]!r} | top school={recs[0]['school']['id'] if recs else 'none'}")
 
         results = []
-        for rec in recs:
+        for i, rec in enumerate(recs):
             school    = rec["school"]
             match_pct = rec["match_pct"]
 
             pourquoi, conseils = build_fallback(school, data)
 
-            if api_key:
+            # Only call Groq for top 3 to stay within rate limits
+            if api_key and i < 3:
                 prompt = build_groq_prompt(school, data, match_pct)
                 raw    = call_groq(prompt, api_key)
                 if raw:
@@ -854,6 +874,7 @@ def predict():
                 "career_paths":     school.get("career_paths", []),
                 "salary_range":     school.get("salary_range", ""),
                 "duration":         school.get("duration", ""),
+                "website":          SCHOOL_WEBSITES.get(school["id"], ""),
             })
 
         # ── Save result for authenticated users ──────────────────────────────
