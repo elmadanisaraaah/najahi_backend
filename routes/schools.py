@@ -8,11 +8,15 @@ import requests
 from db import get_conn, release_conn
 from middleware import token_required
 from config import Config
+from utils.scraper import get_context, warm_cache
 
 schools_bp = Blueprint("schools", __name__)
 
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL   = "mistral-large-latest"
+
+# Kick off background scraping as soon as the module is imported
+warm_cache()
 
 SYSTEM_PROMPT = (
     "You are NajahiBot, a highly accurate expert assistant specializing exclusively in Moroccan higher education. "
@@ -20,6 +24,10 @@ SYSTEM_PROMPT = (
     "ENCG, ISCAE, UIR, UM6P, Al Akhawayn, all Facultés de Médecine, CPGE, BTS, OFPPT, and all public universities "
     "(Mohammed V, Hassan II, Cadi Ayyad, Sidi Mohammed Ben Abdellah, Ibn Tofail, Abdelmalek Essaadi, Ibn Zohr, "
     "Moulay Ismail, Mohammed Premier, Hassan Premier, Sultan Moulay Slimane).\n\n"
+
+    "You may also receive LIVE DATA scraped from official Moroccan sites (postbac.ma, dates-concours.ma, "
+    "orientationmaroc.net). When this data is present, prioritise it over your training knowledge for "
+    "concours dates, deadlines, and registration platforms.\n\n"
 
     "RULES:\n"
     "1. NEVER invent data, statistics, phone numbers, or websites you are not sure about\n"
@@ -30,7 +38,8 @@ SYSTEM_PROMPT = (
     "6. For engineering schools: mention CNC, note bac 16+, CPGE required\n"
     "7. For medicine: mention the national concours, very competitive, 17+ average\n"
     "8. For ENCG/business: mention their own concours, note bac 14+\n"
-    "9. Always mention if a school is public (free) or private (fees in MAD)"
+    "9. Always mention if a school is public (free) or private (fees in MAD)\n"
+    "10. When answering about concours dates or inscriptions, cite the source site if you got it from live data"
 )
 
 
@@ -57,23 +66,41 @@ def _ensure_schools_chat_history_table():
 _ensure_schools_chat_history_table()
 
 
-def call_mistral(query: str, api_key: str):
+def call_mistral(query: str, api_key: str, context: str = ""):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Inject live scraped data as a priming context turn
+    if context.strip():
+        messages.append({
+            "role": "user",
+            "content": (
+                "[DONNÉES EN TEMPS RÉEL — extraites de sites officiels marocains]\n\n"
+                + context
+            ),
+        })
+        messages.append({
+            "role": "assistant",
+            "content": (
+                "Bien reçu. J'ai pris connaissance des dernières informations disponibles "
+                "sur les concours, calendriers et inscriptions au Maroc. Je suis prêt à répondre."
+            ),
+        })
+
+    messages.append({"role": "user", "content": query})
+
     body = {
         "model": MISTRAL_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": query},
-        ],
+        "messages": messages,
         "max_tokens": 1000,
     }
     try:
         res = requests.post(MISTRAL_API_URL, headers=headers, json=body, timeout=30)
-        print(f"[Mistral] status={res.status_code}")
-        print(f"[Mistral] response={res.text[:300]}")
+        print(f"[Mistral] status={res.status_code} ctx_len={len(context)}")
         if not res.ok:
             print(f"[Mistral] error body: {res.text}")
             return None
@@ -113,7 +140,8 @@ def ask_school():
                 "found": False,
             }), 200
 
-        answer = call_mistral(query, api_key)
+        context = get_context()
+        answer  = call_mistral(query, api_key, context)
 
         if not answer:
             return jsonify({
