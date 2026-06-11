@@ -88,18 +88,19 @@ def get_categories():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         _ensure_tables(cur)
         conn.commit()
-        result = []
-        for cat in CATEGORIES:
-            cur.execute(
-                "SELECT COUNT(*) AS cnt FROM forum_posts WHERE category = %s",
-                (cat["id"],)
-            )
-            row = cur.fetchone()
-            result.append({**cat, "count": int(row["cnt"])})
+        cur.execute("""
+            SELECT category, COUNT(*) AS cnt
+            FROM forum_posts
+            GROUP BY category
+            HAVING COUNT(*) >= 1
+            ORDER BY cnt DESC
+        """)
+        rows = cur.fetchall()
+        result = [{"id": r["category"], "label": r["category"], "count": int(r["cnt"])} for r in rows]
         return jsonify(result), 200
     except Exception:
         print("FORUM CATEGORIES ERROR:", traceback.format_exc())
-        return jsonify(CATEGORIES), 200
+        return jsonify([]), 200
     finally:
         cur.close(); release_conn(conn)
 
