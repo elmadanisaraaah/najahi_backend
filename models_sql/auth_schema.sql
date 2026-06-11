@@ -91,3 +91,18 @@ CREATE INDEX IF NOT EXISTS idx_email_tokens_user_id ON email_verification_tokens
 CREATE INDEX IF NOT EXISTS idx_reset_tokens_user_id ON password_reset_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_phone_otp_phone ON phone_otp_codes(phone_number);
+
+-- Ensure all student_profiles columns exist (safe to run multiple times)
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS telephone        VARCHAR(30);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS date_naissance   DATE;
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ville            VARCHAR(120);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS etablissement    VARCHAR(200);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS annee_scolaire   VARCHAR(20);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS moyenne_generale NUMERIC(5,2);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS avatar_url       TEXT;
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS type_bac         VARCHAR(120);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS note_bac         NUMERIC(4,2);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS filiere_actuelle VARCHAR(120);
+-- Back-fill filiere_actuelle from the original filiere column for existing rows
+UPDATE student_profiles SET filiere_actuelle = filiere
+WHERE filiere_actuelle IS NULL AND filiere IS NOT NULL;
