@@ -1,5 +1,7 @@
-import uuid, random, string
+import uuid, random, string, traceback
+from datetime import date, timedelta
 from flask import Blueprint, request, jsonify, g
+from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from middleware import token_required
 
@@ -295,5 +297,197 @@ def solo_stats():
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── GET /api/study/stats ─────────────────────────────────────────────────────
+@study_bp.route('/stats', methods=['GET'])
+@token_required
+def study_stats():
+    user_id = str(g.current_user["id"])
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        _ensure_solo_table(cur)
+        conn.commit()
+
+        cur.execute("SELECT id FROM student_profiles WHERE user_id = %s", (user_id,))
+        profile_row = cur.fetchone()
+        profile_id = str(profile_row["id"]) if profile_row else None
+
+        # ── Solo aggregate ────────────────────────────────────────────────────
+        cur.execute("""
+            SELECT
+                COALESCE(SUM(duration_minutes), 0)                                       AS total_solo_min,
+                COUNT(*) FILTER (WHERE ended_at IS NOT NULL)                             AS total_solo_sess,
+                COALESCE(SUM(duration_minutes) FILTER (
+                    WHERE started_at >= NOW() - INTERVAL '7 days'), 0)                   AS week_solo_min,
+                COALESCE(SUM(duration_minutes) FILTER (
+                    WHERE started_at >= NOW() - INTERVAL '14 days'
+                    AND   started_at <  NOW() - INTERVAL '7 days'), 0)                   AS prev_week_solo_min,
+                COALESCE(SUM(duration_minutes) FILTER (
+                    WHERE started_at >= date_trunc('month', NOW())), 0)                  AS month_solo_min,
+                COALESCE(SUM(duration_minutes) FILTER (
+                    WHERE started_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+                    AND   started_at <  date_trunc('month', NOW())), 0)                  AS prev_month_solo_min,
+                COUNT(*) FILTER (WHERE ended_at IS NOT NULL
+                    AND started_at >= NOW() - INTERVAL '7 days')                         AS week_solo_sess
+            FROM solo_study_sessions
+            WHERE user_id = %s AND ended_at IS NOT NULL
+        """, (user_id,))
+        solo = cur.fetchone()
+
+        # ── Room aggregate ────────────────────────────────────────────────────
+        room = dict(total_room_min=0, total_room_sess=0, week_room_min=0,
+                    prev_week_room_min=0, month_room_min=0, prev_month_room_min=0,
+                    week_room_sess=0)
+        if profile_id:
+            cur.execute("""
+                SELECT
+                    COALESCE(SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60), 0)           AS total_room_min,
+                    COUNT(*) FILTER (WHERE left_at IS NOT NULL)                            AS total_room_sess,
+                    COALESCE(SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60) FILTER (
+                        WHERE joined_at >= NOW() - INTERVAL '7 days'), 0)                 AS week_room_min,
+                    COALESCE(SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60) FILTER (
+                        WHERE joined_at >= NOW() - INTERVAL '14 days'
+                        AND   joined_at <  NOW() - INTERVAL '7 days'), 0)                 AS prev_week_room_min,
+                    COALESCE(SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60) FILTER (
+                        WHERE joined_at >= date_trunc('month', NOW())), 0)                AS month_room_min,
+                    COALESCE(SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60) FILTER (
+                        WHERE joined_at >= date_trunc('month', NOW() - INTERVAL '1 month')
+                        AND   joined_at <  date_trunc('month', NOW())), 0)                AS prev_month_room_min,
+                    COUNT(*) FILTER (WHERE left_at IS NOT NULL
+                        AND joined_at >= NOW() - INTERVAL '7 days')                       AS week_room_sess
+                FROM study_room_participants
+                WHERE student_id = %s
+                  AND left_at IS NOT NULL
+                  AND EXTRACT(EPOCH FROM(left_at-joined_at)) > 0
+            """, (profile_id,))
+            r = cur.fetchone()
+            if r:
+                room = {k: float(v) if v is not None else 0 for k, v in r.items()}
+
+        # ── Daily stats (last 7 days) ─────────────────────────────────────────
+        cur.execute("""
+            SELECT (started_at AT TIME ZONE 'UTC')::date AS day,
+                   SUM(duration_minutes) AS minutes
+            FROM solo_study_sessions
+            WHERE user_id = %s AND ended_at IS NOT NULL
+              AND started_at >= NOW() - INTERVAL '7 days'
+            GROUP BY 1
+        """, (user_id,))
+        solo_daily = {str(r["day"]): float(r["minutes"]) for r in cur.fetchall()}
+
+        room_daily = {}
+        if profile_id:
+            cur.execute("""
+                SELECT (joined_at AT TIME ZONE 'UTC')::date AS day,
+                       SUM(EXTRACT(EPOCH FROM(left_at-joined_at))/60) AS minutes
+                FROM study_room_participants
+                WHERE student_id = %s AND left_at IS NOT NULL
+                  AND EXTRACT(EPOCH FROM(left_at-joined_at)) > 0
+                  AND joined_at >= NOW() - INTERVAL '7 days'
+                GROUP BY 1
+            """, (profile_id,))
+            room_daily = {str(r["day"]): float(r["minutes"]) for r in cur.fetchall()}
+
+        today = date.today()
+        daily_stats = []
+        for i in range(6, -1, -1):
+            d = today - timedelta(days=i)
+            ds = str(d)
+            mins = solo_daily.get(ds, 0) + room_daily.get(ds, 0)
+            daily_stats.append({"date": ds, "minutes": round(mins, 1), "weekday": d.weekday()})
+
+        # ── Streak ────────────────────────────────────────────────────────────
+        cur.execute("""
+            SELECT DISTINCT (started_at AT TIME ZONE 'UTC')::date AS d
+            FROM solo_study_sessions WHERE user_id = %s AND ended_at IS NOT NULL
+        """, (user_id,))
+        solo_dates = {r["d"] for r in cur.fetchall()}
+
+        room_dates = set()
+        if profile_id:
+            cur.execute("""
+                SELECT DISTINCT (joined_at AT TIME ZONE 'UTC')::date AS d
+                FROM study_room_participants WHERE student_id = %s AND left_at IS NOT NULL
+            """, (profile_id,))
+            room_dates = {r["d"] for r in cur.fetchall()}
+
+        all_dates = sorted(solo_dates | room_dates, reverse=True)
+        streak, expected = 0, today
+        for d in all_dates:
+            if d == expected:
+                streak += 1
+                expected = d - timedelta(days=1)
+            else:
+                break
+
+        # ── Best day of week ──────────────────────────────────────────────────
+        dow_names = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"]
+        cur.execute("""
+            SELECT EXTRACT(ISODOW FROM (started_at AT TIME ZONE 'UTC')) AS dow,
+                   SUM(duration_minutes) AS minutes
+            FROM solo_study_sessions
+            WHERE user_id = %s AND ended_at IS NOT NULL
+            GROUP BY 1 ORDER BY 2 DESC LIMIT 1
+        """, (user_id,))
+        best_row = cur.fetchone()
+        best_day = dow_names[int(best_row["dow"]) - 1] if best_row else None
+
+        # ── Recent sessions ───────────────────────────────────────────────────
+        cur.execute("""
+            SELECT started_at AS ts, duration_minutes AS minutes
+            FROM solo_study_sessions
+            WHERE user_id = %s AND ended_at IS NOT NULL
+            ORDER BY started_at DESC LIMIT 10
+        """, (user_id,))
+        recent_solo = [{"type":"solo","ts":r["ts"].isoformat(),
+                        "minutes":round(float(r["minutes"]),1),"subject":None}
+                       for r in cur.fetchall()]
+
+        recent_rooms = []
+        if profile_id:
+            cur.execute("""
+                SELECT srp.joined_at AS ts,
+                       EXTRACT(EPOCH FROM(srp.left_at-srp.joined_at))/60 AS minutes,
+                       sr.sujet AS subject
+                FROM study_room_participants srp
+                JOIN study_rooms sr ON sr.id = srp.room_id
+                WHERE srp.student_id = %s AND srp.left_at IS NOT NULL
+                  AND EXTRACT(EPOCH FROM(srp.left_at-srp.joined_at)) > 0
+                ORDER BY srp.joined_at DESC LIMIT 10
+            """, (profile_id,))
+            recent_rooms = [{"type":"room","ts":r["ts"].isoformat(),
+                             "minutes":round(float(r["minutes"]),1),"subject":r["subject"]}
+                            for r in cur.fetchall()]
+
+        recent = sorted(recent_solo + recent_rooms, key=lambda x: x["ts"], reverse=True)[:10]
+
+        # ── Assemble ──────────────────────────────────────────────────────────
+        total_solo_min = float(solo["total_solo_min"])
+        total_room_min = float(room["total_room_min"])
+
+        return jsonify({
+            "total_minutes":      round(total_solo_min + total_room_min, 1),
+            "total_sessions":     int(solo["total_solo_sess"]) + int(room["total_room_sess"]),
+            "this_week_minutes":  round(float(solo["week_solo_min"]) + float(room["week_room_min"]), 1),
+            "last_week_minutes":  round(float(solo["prev_week_solo_min"]) + float(room["prev_week_room_min"]), 1),
+            "this_month_minutes": round(float(solo["month_solo_min"]) + float(room["month_room_min"]), 1),
+            "last_month_minutes": round(float(solo["prev_month_solo_min"]) + float(room["prev_month_room_min"]), 1),
+            "week_solo_sessions": int(solo["week_solo_sess"]),
+            "week_room_sessions": int(room["week_room_sess"]),
+            "streak_days":        streak,
+            "solo_minutes":       round(total_solo_min, 1),
+            "room_minutes":       round(total_room_min, 1),
+            "best_day":           best_day,
+            "daily_stats":        daily_stats,
+            "recent_sessions":    recent,
+        }), 200
+
+    except Exception:
+        print("STUDY STATS ERROR:", traceback.format_exc())
+        return jsonify({"error": "Erreur serveur"}), 500
     finally:
         cur.close(); release_conn(conn)
