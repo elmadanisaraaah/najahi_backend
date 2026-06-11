@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, g
 from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from middleware import token_required
+from routes.notifications import send_notification
 
 
 def admin_required(fn):
@@ -280,7 +281,35 @@ def create_concours():
         ))
         row = cur.fetchone()
         conn.commit()
-        return jsonify(_row_to_dict(row)), 201
+        result = _row_to_dict(row)
+
+        # Notify users who subscribed to any concours in the same category
+        try:
+            conn2 = get_conn()
+            try:
+                with conn2.cursor(cursor_factory=RealDictCursor) as cur2:
+                    cur2.execute("""
+                        SELECT DISTINCT cs.user_id
+                        FROM concours_subscriptions cs
+                        JOIN concours_calendar cc ON cc.id = cs.concours_id
+                        WHERE cc.category = %s
+                    """, (category,))
+                    subscribers = [str(r["user_id"]) for r in cur2.fetchall()]
+            finally:
+                release_conn(conn2)
+            exam_str = result.get("exam_date") or "date à confirmer"
+            for uid in subscribers:
+                send_notification(
+                    uid,
+                    f"Nouveau concours : {name} 📅",
+                    f"{school} — {category}. Date d'examen : {exam_str}.",
+                    type="concours",
+                    link="/app/concours",
+                )
+        except Exception:
+            print("CONCOURS NOTIFY ERROR:", traceback.format_exc())
+
+        return jsonify(result), 201
     except Exception:
         conn.rollback()
         print("CONCOURS CREATE ERROR:", traceback.format_exc())

@@ -15,6 +15,7 @@ from auth_utils import (
 )
 from services.email_service import send_verification_email, send_reset_password_email
 from config import Config
+from routes.notifications import send_notification
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -141,6 +142,17 @@ def register():
         except Exception as email_err:
             print("EMAIL ERROR (non-fatal):", str(email_err))
             # Continue anyway - token is saved
+
+        try:
+            send_notification(
+                user["id"],
+                "Bienvenue sur Najahi ! 🎓",
+                f"Bonjour {prenom or 'là'} ! Ton compte est créé. Commence par vérifier ton email puis explore tes recommandations d'orientation.",
+                type="success",
+                link="/app/orientation",
+            )
+        except Exception:
+            pass
 
         return jsonify({
             "message": "Compte créé. Vérifiez votre email avec le code envoyé.",

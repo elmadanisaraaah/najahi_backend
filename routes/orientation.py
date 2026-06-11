@@ -10,6 +10,7 @@ from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from config import Config
 from middleware import token_required
+from routes.notifications import send_notification
 
 orientation_bp = Blueprint("orientation", __name__)
 
@@ -877,6 +878,16 @@ def predict():
                             json.dumps(data),
                         ))
                         conn.commit()
+                        try:
+                            send_notification(
+                                user_id,
+                                "Tes résultats d'orientation sont prêts ! 🧭",
+                                f"Najahi recommande : {top['name']} ({top['match_pct']}% de compatibilité). Consulte ton profil pour voir toutes tes recommandations.",
+                                type="orientation",
+                                link="/app/orientation",
+                            )
+                        except Exception:
+                            pass
                 except Exception as db_e:
                     print(f"[/predict] DB save error: {db_e}")
                     conn.rollback()
