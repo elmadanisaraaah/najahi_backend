@@ -1,9 +1,20 @@
 import traceback
 from datetime import date
+from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from middleware import token_required
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @token_required
+    def wrapper(*args, **kwargs):
+        if g.current_user.get("role") != "admin":
+            return jsonify({"error": "Accès refusé — admin uniquement"}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 concours_bp = Blueprint("concours", __name__)
 
@@ -230,6 +241,116 @@ def subscribe():
     except Exception:
         conn.rollback()
         print("CONCOURS SUBSCRIBE ERROR:", traceback.format_exc())
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/concours  (admin) ───────────────────────────────────────────────
+
+@concours_bp.route("", methods=["POST"])
+@admin_required
+def create_concours():
+    _ensure_tables()
+    data = request.get_json(silent=True) or {}
+    name     = (data.get("name") or "").strip()
+    school   = (data.get("school") or "").strip()
+    category = (data.get("category") or "").strip()
+    if not name or not school or not category:
+        return jsonify({"error": "name, school et category sont requis"}), 400
+
+    def opt(key):
+        v = (data.get(key) or "").strip()
+        return v or None
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""
+            INSERT INTO concours_calendar
+                (name, school, category, registration_start, registration_end,
+                 exam_date, results_date, description, official_link)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING *
+        """, (
+            name, school, category,
+            opt("registration_start"), opt("registration_end"),
+            opt("exam_date"), opt("results_date"),
+            opt("description"), opt("official_link"),
+        ))
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify(_row_to_dict(row)), 201
+    except Exception:
+        conn.rollback()
+        print("CONCOURS CREATE ERROR:", traceback.format_exc())
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── PUT /api/concours/<id>  (admin) ──────────────────────────────────────────
+
+@concours_bp.route("/<concours_id>", methods=["PUT"])
+@admin_required
+def update_concours(concours_id):
+    _ensure_tables()
+    data = request.get_json(silent=True) or {}
+
+    ALLOWED = ["name","school","category","registration_start","registration_end",
+               "exam_date","results_date","description","official_link","is_active"]
+    updates = {}
+    for key in ALLOWED:
+        if key in data:
+            val = data[key]
+            if isinstance(val, str):
+                val = val.strip() or None
+            updates[key] = val
+
+    if not updates:
+        return jsonify({"error": "Aucun champ à mettre à jour"}), 400
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id FROM concours_calendar WHERE id = %s", (concours_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "Concours introuvable"}), 404
+
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        values     = list(updates.values()) + [concours_id]
+        cur.execute(
+            f"UPDATE concours_calendar SET {set_clause} WHERE id = %s RETURNING *",
+            values
+        )
+        row = cur.fetchone()
+        conn.commit()
+        return jsonify(_row_to_dict(row)), 200
+    except Exception:
+        conn.rollback()
+        print("CONCOURS UPDATE ERROR:", traceback.format_exc())
+        return jsonify({"error": "Erreur serveur"}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── DELETE /api/concours/<id>  (admin) ───────────────────────────────────────
+
+@concours_bp.route("/<concours_id>", methods=["DELETE"])
+@admin_required
+def delete_concours(concours_id):
+    _ensure_tables()
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM concours_calendar WHERE id = %s", (concours_id,))
+        if cur.rowcount == 0:
+            return jsonify({"error": "Concours introuvable"}), 404
+        conn.commit()
+        return jsonify({"ok": True}), 200
+    except Exception:
+        conn.rollback()
+        print("CONCOURS DELETE ERROR:", traceback.format_exc())
         return jsonify({"error": "Erreur serveur"}), 500
     finally:
         cur.close(); release_conn(conn)
