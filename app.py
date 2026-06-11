@@ -20,6 +20,7 @@ from routes.admin import admin_bp
 from routes.forum import forum_bp
 from routes.concours import concours_bp
 from routes.notifications import notifications_bp
+from routes.temoignages import temoignages_bp
 
 def run_schema():
     schema_path = os.path.join(os.path.dirname(__file__), "models_sql", "auth_schema.sql")
@@ -69,6 +70,7 @@ app.register_blueprint(admin_bp,    url_prefix="/api/admin")
 app.register_blueprint(forum_bp,    url_prefix="/api/forum")
 app.register_blueprint(concours_bp,       url_prefix="/api/concours")
 app.register_blueprint(notifications_bp,  url_prefix="/api/notifications")
+app.register_blueprint(temoignages_bp,    url_prefix="/api/temoignages")
 
 register_socket_events(socketio)
 
