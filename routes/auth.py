@@ -5,7 +5,7 @@ import requests as http_requests
 from flask import Blueprint, request, jsonify
 from extensions import limiter
 from psycopg2.extras import RealDictCursor
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from db import get_conn, release_conn
 from auth_utils import (
     hash_password, check_password, hash_token,
@@ -303,9 +303,10 @@ def login():
             request.remote_addr, request.headers.get("User-Agent"),
             refresh_expires_at
         ))
+        now_utc = datetime.now(timezone.utc)
         cur.execute(
-            "UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = %s",
-            (user["id"],)
+            "UPDATE users SET last_login_at = %s, updated_at = %s WHERE id = %s",
+            (now_utc, now_utc, user["id"])
         )
         conn.commit()
 
