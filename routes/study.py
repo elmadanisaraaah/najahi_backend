@@ -147,6 +147,44 @@ def create_room():
         cur.close(); release_conn(conn)
 
 
+# ── GET /api/study/leaderboard ──────────────────────────────
+@study_bp.route('/leaderboard', methods=['GET'])
+@token_required
+def get_leaderboard():
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        # Ensure opt-in column exists
+        cur.execute("""
+            ALTER TABLE student_profiles
+              ADD COLUMN IF NOT EXISTS show_in_leaderboard BOOLEAN DEFAULT FALSE
+        """)
+        conn.commit()
+        cur.execute('''
+            SELECT sp.prenom, sp.nom, sp.avatar_url, sp.ville,
+                   COALESCE(SUM(s.duration_minutes), 0) AS weekly_minutes,
+                   COUNT(s.id) AS session_count
+            FROM student_profiles sp
+            JOIN solo_study_sessions s ON s.user_id = sp.user_id
+            WHERE s.started_at >= NOW() - INTERVAL \'7 days\'
+              AND s.ended_at IS NOT NULL
+              AND sp.show_in_leaderboard = TRUE
+            GROUP BY sp.id, sp.prenom, sp.nom, sp.avatar_url, sp.ville
+            ORDER BY weekly_minutes DESC
+            LIMIT 10
+        ''')
+        cols = ['prenom', 'nom', 'avatar_url', 'ville', 'weekly_minutes', 'session_count']
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+        for r in rows:
+            r['weekly_minutes'] = float(r['weekly_minutes'] or 0)
+            r['session_count']  = int(r['session_count'] or 0)
+        return jsonify(rows), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
 # ── POST /api/study/rooms/join — join by code ───────────────
 @study_bp.route('/rooms/join', methods=['POST'])
 @token_required
