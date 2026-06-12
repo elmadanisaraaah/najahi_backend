@@ -67,16 +67,16 @@ def _ensure_tables(cur):
 
 def _author(cur, user_id):
     cur.execute("""
-        SELECT u.email, sp.prenom, sp.nom
+        SELECT u.email, sp.prenom, sp.nom, sp.avatar_url
         FROM users u
         LEFT JOIN student_profiles sp ON sp.user_id = u.id
         WHERE u.id = %s
     """, (user_id,))
     row = cur.fetchone()
     if not row:
-        return {"prenom": "Utilisateur", "nom": "", "email": ""}
+        return {"prenom": "Utilisateur", "nom": "", "email": "", "avatar_url": None}
     prenom = row["prenom"] or row["email"].split("@")[0]
-    return {"prenom": prenom, "nom": row["nom"] or "", "email": row["email"]}
+    return {"prenom": prenom, "nom": row["nom"] or "", "email": row["email"], "avatar_url": row["avatar_url"]}
 
 
 # ── GET /api/forum/categories ──────────────────────────────────────────────

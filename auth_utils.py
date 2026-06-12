@@ -82,7 +82,7 @@ def build_auth_response(user: dict, access_token: str, refresh_token: str):
         conn = get_conn()
         cur  = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute(
-            "SELECT prenom, nom FROM student_profiles WHERE user_id = %s",
+            "SELECT prenom, nom, avatar_url FROM student_profiles WHERE user_id = %s",
             (user["id"],)
         )
         profile = cur.fetchone()
@@ -93,6 +93,8 @@ def build_auth_response(user: dict, access_token: str, refresh_token: str):
         release_conn(conn)
     except Exception:
         pass
+
+    avatar_url = profile.get("avatar_url") if profile else None
 
     return {
         "message":       "Authentication successful",
@@ -108,5 +110,6 @@ def build_auth_response(user: dict, access_token: str, refresh_token: str):
             "auth_provider":     user.get("auth_provider", "email"),
             "prenom":            prenom,
             "nom":               nom,
+            "avatar_url":        avatar_url,
         }
     }
