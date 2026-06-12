@@ -36,18 +36,39 @@ def list_rooms():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute('''
+        # Ensure category/tag columns exist
+        cur.execute("""
+            ALTER TABLE study_rooms
+              ADD COLUMN IF NOT EXISTS category VARCHAR(20) DEFAULT 'general',
+              ADD COLUMN IF NOT EXISTS tag       VARCHAR(100)
+        """)
+        conn.commit()
+
+        category = request.args.get("category", "").strip()
+        tag      = request.args.get("tag", "").strip()
+        filters  = ["r.is_active = TRUE", "r.is_public = TRUE"]
+        params   = []
+        if category and category in ("general", "ville", "lycee"):
+            filters.append("r.category = %s")
+            params.append(category)
+        if tag:
+            filters.append("r.tag ILIKE %s")
+            params.append(f"%{tag}%")
+
+        where = " AND ".join(filters)
+        cur.execute(f'''
             SELECT r.id, r.nom, r.sujet, r.code_acces,
                    r.max_participants, r.pomodoro_work, r.pomodoro_break,
+                   r.category, r.tag,
                    COUNT(p.student_id) FILTER (WHERE p.is_present) AS participant_count
             FROM study_rooms r
             LEFT JOIN study_room_participants p ON p.room_id = r.id
-            WHERE r.is_active = TRUE AND r.is_public = TRUE
+            WHERE {where}
             GROUP BY r.id
             ORDER BY r.created_at DESC
-        ''')
+        ''', params)
         cols = ['id','nom','sujet','code_acces','max_participants',
-                'pomodoro_work','pomodoro_break','participant_count']
+                'pomodoro_work','pomodoro_break','category','tag','participant_count']
         rows = [dict(zip(cols, row)) for row in cur.fetchall()]
         for r in rows: r['id'] = str(r['id'])
         return jsonify(rows), 200
@@ -83,19 +104,24 @@ def create_room():
             if not cur.fetchone(): break
             code = gen_code()
 
-        room_id = str(uuid.uuid4())
+        room_id  = str(uuid.uuid4())
+        category = (data.get('category') or 'general').strip()
+        if category not in ('general', 'ville', 'lycee'):
+            category = 'general'
+        tag = (data.get('tag') or '').strip() or None
         cur.execute('''
             INSERT INTO study_rooms
             (id, host_id, nom, sujet, code_acces, max_participants,
-             is_public, pomodoro_work, pomodoro_break)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             is_public, pomodoro_work, pomodoro_break, category, tag)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ''', (room_id, profile_id, nom,
               data.get('sujet') or None,
               code,
               data.get('max_participants', 10),
               data.get('is_public', True),
               data.get('pomodoro_work', 25),
-              data.get('pomodoro_break', 5)))
+              data.get('pomodoro_break', 5),
+              category, tag))
 
         cur.execute('''
             INSERT INTO study_room_participants (room_id, student_id)
@@ -111,6 +137,8 @@ def create_room():
             'pomodoro_work': data.get('pomodoro_work', 25),
             'pomodoro_break': data.get('pomodoro_break', 5),
             'is_public': data.get('is_public', True),
+            'category': category,
+            'tag': tag or '',
         }), 201
     except Exception as e:
         conn.rollback()
