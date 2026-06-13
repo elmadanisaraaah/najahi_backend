@@ -2,26 +2,56 @@ import os
 import requests
 from config import Config
 
-RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+# NOTE: key is read inside send_email() on every call so Railway env vars
+# are always picked up without requiring a process restart.
+
+# From-address priority:
+#   1. RESEND_FROM env var  (e.g. "Najahi <noreply@najahi.ma>")
+#   2. Fall back to Resend's shared test sender.
+#
+# IMPORTANT: onboarding@resend.dev can ONLY deliver to the email address of
+# the Resend account owner.  For any other recipient Resend returns 403.
+# Set RESEND_FROM to a verified-domain sender for production.
+_FALLBACK_FROM = "Najahi <onboarding@resend.dev>"
 
 
 def send_email(to_email, subject, html_content):
-    response = requests.post(
-        "https://api.resend.com/emails",
-        headers={
-            "Authorization": f"Bearer {RESEND_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "from": "Najahi <onboarding@resend.dev>",
-            "to": [to_email],
-            "subject": subject,
-            "html": html_content
-        }
-    )
-    print("RESEND STATUS:", response.status_code)
-    print("RESEND RESPONSE:", response.text)
-    return response.status_code == 200
+    api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    from_addr = os.environ.get("RESEND_FROM", "").strip() or _FALLBACK_FROM
+
+    if not api_key:
+        print("[EMAIL] ERROR: RESEND_API_KEY is not set or empty — email not sent")
+        raise RuntimeError("RESEND_API_KEY manquant")
+
+    print(f"[EMAIL] Sending to={to_email!r}  from={from_addr!r}  subject={subject!r}")
+
+    try:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": from_addr,
+                "to": [to_email],
+                "subject": subject,
+                "html": html_content,
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[EMAIL] HTTP error contacting Resend: {exc}")
+        raise
+
+    print(f"[EMAIL] Resend status={response.status_code}  body={response.text[:500]}")
+
+    if response.status_code not in (200, 201):
+        raise RuntimeError(
+            f"Resend rejected email (status {response.status_code}): {response.text[:300]}"
+        )
+
+    return True
 
 
 def _html_wrapper(title: str, content: str) -> str:

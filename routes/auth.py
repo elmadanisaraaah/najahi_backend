@@ -138,10 +138,10 @@ def register():
 
         try:
             send_verification_email(email, verification_code)
-            print("Verification email sent to", email)
+            print(f"[AUTH] Verification email delivered to {email}")
         except Exception as email_err:
-            print("EMAIL ERROR (non-fatal):", str(email_err))
-            # Continue anyway - token is saved
+            print(f"[AUTH] Verification email FAILED for {email}: {email_err}")
+            # Non-fatal: token is stored, user can use resend-verification
 
         try:
             send_notification(
@@ -261,8 +261,9 @@ def resend_verification():
 
         try:
             send_verification_email(email, verification_code)
+            print(f"[AUTH] Resend verification email delivered to {email}")
         except Exception as e:
-            print("RESEND EMAIL ERROR:", e)
+            print(f"[AUTH] Resend verification email FAILED for {email}: {e}")
 
         return jsonify({"message": "Code renvoyé."}), 200
 
@@ -457,10 +458,9 @@ def forgot_password():
             conn.commit()
             try:
                 send_reset_password_email(user["email"], raw_reset_token)
-                print("Reset email sent to", email)
+                print(f"[AUTH] Password-reset email delivered to {email}")
             except Exception as email_err:
-                print("EMAIL ERROR (non-fatal):", str(email_err))
-                # Continue anyway - token is saved
+                print(f"[AUTH] Password-reset email FAILED for {email}: {email_err}")
 
         return jsonify({
             "message": "Si un compte existe avec cet email, un lien a été envoyé."
