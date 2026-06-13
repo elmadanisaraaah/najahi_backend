@@ -1,6 +1,10 @@
 import os
 import uuid
 import traceback
+import base64
+import json
+import re as _re
+import requests as _req
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Blueprint, request, jsonify, g, send_file
@@ -39,6 +43,38 @@ def _ensure_bulletins_table():
 
 
 _ensure_bulletins_table()
+
+_PIXTRAL_MODEL = "pixtral-12b-2409"
+_notes_table_ok = False
+
+
+def _ensure_notes_table():
+    global _notes_table_ok
+    if _notes_table_ok:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS bulletin_notes (
+                    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    bulletin_id UUID        REFERENCES bulletins(id) ON DELETE CASCADE,
+                    matiere     VARCHAR(120) NOT NULL,
+                    note        DECIMAL(4,2) NOT NULL,
+                    coefficient DECIMAL(3,1),
+                    created_at  TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            conn.commit()
+        _notes_table_ok = True
+    except Exception:
+        conn.rollback()
+    finally:
+        release_conn(conn)
+
+
+_ensure_notes_table()
 
 
 def _auth_headers():
@@ -316,5 +352,238 @@ def delete_bulletin(bulletin_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"error": str(e)}), 500
+    finally:
+        release_conn(conn)
+
+
+# ── POST /api/profile/bulletin/extract ───────────────────────────────────────
+
+@profile_bp.route("/bulletin/extract", methods=["POST"])
+@token_required
+def extract_bulletin_notes():
+    data = request.get_json(silent=True) or {}
+    bulletin_id = data.get("bulletin_id", "").strip()
+    if not bulletin_id:
+        return jsonify({"error": "bulletin_id requis"}), 400
+
+    user_id = str(g.current_user["id"])
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT stored_name FROM bulletins WHERE id = %s AND user_id = %s",
+                (bulletin_id, user_id),
+            )
+            row = cur.fetchone()
+    finally:
+        release_conn(conn)
+
+    if not row:
+        return jsonify({"error": "Bulletin introuvable"}), 404
+
+    filepath = os.path.join(UPLOAD_DIR, row[0])
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Fichier introuvable sur le serveur"}), 404
+
+    api_key = os.environ.get("MISTRAL_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"ok": False, "error": "Service OCR non configuré"}), 200
+
+    with open(filepath, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    ext = row[0].rsplit(".", 1)[-1].lower() if "." in row[0] else "pdf"
+    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(ext, "application/pdf")
+
+    prompt = (
+        "Analyse ce bulletin scolaire marocain et extrais les notes. "
+        "Retourne UNIQUEMENT un objet JSON valide (sans markdown ni ```) avec cette structure:\n"
+        '{"notes":[{"matiere":"Mathématiques","note":14.5,"coefficient":3}],'
+        '"moyenne_generale":15.2,"type_bac":"Bac Sciences Maths A"}\n'
+        "Règles: note entre 0 et 20, coefficient null si non visible, "
+        "moyenne_generale null si non visible, type_bac null si non visible. "
+        'Si le document est illisible: {"error":"illisible"}'
+    )
+
+    raw = ""
+    try:
+        resp = _req.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": _PIXTRAL_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }],
+                "max_tokens": 2000,
+                "temperature": 0.1,
+            },
+            timeout=60,
+        )
+        print(f"[OCR] Mistral status={resp.status_code} bulletin={bulletin_id}")
+        if not resp.ok:
+            print(f"[OCR] Error body: {resp.text[:400]}")
+            return jsonify({"ok": False, "error": "Extraction échouée — saisis les notes manuellement."}), 200
+
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        print(f"[OCR] Raw (first 300): {raw[:300]}")
+
+        cleaned = _re.sub(r"^```(?:json)?\s*", "", raw)
+        cleaned = _re.sub(r"\s*```$", "", cleaned.strip())
+        parsed = json.loads(cleaned)
+
+        if "error" in parsed:
+            return jsonify({"ok": False, "error": "Document illisible — saisis les notes manuellement."}), 200
+
+        valid_notes = []
+        for n in parsed.get("notes", []):
+            try:
+                mat = str(n.get("matiere", "")).strip()[:120]
+                if not mat:
+                    continue
+                note_val = round(float(n["note"]), 2)
+                coeff = round(float(n["coefficient"]), 1) if n.get("coefficient") is not None else None
+                valid_notes.append({"matiere": mat, "note": note_val, "coefficient": coeff})
+            except (ValueError, TypeError, KeyError):
+                continue
+
+        moy = None
+        if parsed.get("moyenne_generale") is not None:
+            try:
+                moy = round(float(parsed["moyenne_generale"]), 2)
+            except (ValueError, TypeError):
+                pass
+
+        return jsonify({
+            "ok": True,
+            "notes": valid_notes,
+            "moyenne_generale": moy,
+            "type_bac": parsed.get("type_bac") or None,
+        }), 200
+
+    except json.JSONDecodeError:
+        print(f"[OCR] JSON parse error. Raw: {raw[:300]}")
+        return jsonify({"ok": False, "error": "Analyse impossible — saisis les notes manuellement."}), 200
+    except Exception as exc:
+        print(f"[OCR] Exception: {exc}")
+        return jsonify({"ok": False, "error": "Erreur OCR — saisis les notes manuellement."}), 200
+
+
+# ── POST /api/profile/bulletin/confirm ───────────────────────────────────────
+
+@profile_bp.route("/bulletin/confirm", methods=["POST"])
+@token_required
+def confirm_bulletin_notes():
+    data = request.get_json(silent=True) or {}
+    bulletin_id      = data.get("bulletin_id", "").strip()
+    notes            = data.get("notes", [])
+    moyenne_generale = data.get("moyenne_generale")
+    type_bac_raw     = data.get("type_bac", "") or ""
+    type_bac         = str(type_bac_raw).strip()[:120] or None
+
+    if not bulletin_id:
+        return jsonify({"error": "bulletin_id requis"}), 400
+
+    user_id = str(g.current_user["id"])
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM bulletins WHERE id = %s AND user_id = %s",
+                (bulletin_id, user_id),
+            )
+            if not cur.fetchone():
+                return jsonify({"error": "Bulletin introuvable"}), 404
+
+            cur.execute(
+                "DELETE FROM bulletin_notes WHERE bulletin_id = %s AND user_id = %s",
+                (bulletin_id, user_id),
+            )
+
+            saved = 0
+            for n in notes:
+                mat = str(n.get("matiere", "")).strip()[:120]
+                if not mat:
+                    continue
+                try:
+                    note_val = round(float(n["note"]), 2)
+                except (ValueError, TypeError, KeyError):
+                    continue
+                coeff = None
+                if n.get("coefficient") is not None:
+                    try:
+                        coeff = round(float(n["coefficient"]), 1)
+                    except (ValueError, TypeError):
+                        pass
+                cur.execute(
+                    "INSERT INTO bulletin_notes (user_id, bulletin_id, matiere, note, coefficient)"
+                    " VALUES (%s,%s,%s,%s,%s)",
+                    (user_id, bulletin_id, mat, note_val, coeff),
+                )
+                saved += 1
+
+            updates = {}
+            if moyenne_generale is not None:
+                try:
+                    updates["moyenne_generale"] = round(float(moyenne_generale), 2)
+                except (ValueError, TypeError):
+                    pass
+            if type_bac:
+                updates["type_bac"] = type_bac
+
+            if updates:
+                set_clause = ", ".join(f"{k} = %s" for k in updates)
+                cur.execute(
+                    f"UPDATE student_profiles SET {set_clause} WHERE user_id = %s",
+                    list(updates.values()) + [user_id],
+                )
+
+            conn.commit()
+
+        return jsonify({"ok": True, "saved": saved}), 200
+
+    except Exception as exc:
+        conn.rollback()
+        print(f"[CONFIRM NOTES] Error: {exc}")
+        return jsonify({"error": str(exc)}), 500
+    finally:
+        release_conn(conn)
+
+
+# ── GET /api/profile/bulletin/<id>/notes ─────────────────────────────────────
+
+@profile_bp.route("/bulletin/<bulletin_id>/notes", methods=["GET"])
+@token_required
+def get_bulletin_notes(bulletin_id):
+    user_id = str(g.current_user["id"])
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT matiere, note, coefficient
+                   FROM bulletin_notes
+                   WHERE bulletin_id = %s AND user_id = %s
+                   ORDER BY created_at ASC""",
+                (bulletin_id, user_id),
+            )
+            rows = cur.fetchall()
+
+        return jsonify({
+            "notes": [
+                {
+                    "matiere":     r[0],
+                    "note":        float(r[1]),
+                    "coefficient": float(r[2]) if r[2] is not None else None,
+                }
+                for r in rows
+            ]
+        }), 200
+
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
     finally:
         release_conn(conn)
