@@ -102,7 +102,10 @@ ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS moyenne_generale NUMERIC(5
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS avatar_url       TEXT;
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS type_bac         VARCHAR(120);
 ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS note_bac         NUMERIC(4,2);
-ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS filiere_actuelle VARCHAR(120);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS filiere_actuelle     VARCHAR(120);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS show_in_leaderboard BOOLEAN DEFAULT FALSE;
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS type_ecole           VARCHAR(120);
+ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS nom_ecole            VARCHAR(200);
 -- Back-fill filiere_actuelle from the original filiere column for existing rows
 UPDATE student_profiles SET filiere_actuelle = filiere
 WHERE filiere_actuelle IS NULL AND filiere IS NOT NULL;

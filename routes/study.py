@@ -36,14 +36,6 @@ def list_rooms():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        # Ensure category/tag columns exist
-        cur.execute("""
-            ALTER TABLE study_rooms
-              ADD COLUMN IF NOT EXISTS category VARCHAR(20) DEFAULT 'general',
-              ADD COLUMN IF NOT EXISTS tag       VARCHAR(100)
-        """)
-        conn.commit()
-
         category = request.args.get("category", "").strip()
         tag      = request.args.get("tag", "").strip()
         filters  = ["r.is_active = TRUE", "r.is_public = TRUE"]
@@ -154,12 +146,6 @@ def get_leaderboard():
     conn = get_conn()
     try:
         cur = conn.cursor()
-        # Ensure opt-in column exists
-        cur.execute("""
-            ALTER TABLE student_profiles
-              ADD COLUMN IF NOT EXISTS show_in_leaderboard BOOLEAN DEFAULT FALSE
-        """)
-        conn.commit()
         cur.execute('''
             SELECT sp.prenom, sp.nom, sp.avatar_url, sp.ville,
                    COALESCE(SUM(s.duration_minutes), 0) AS weekly_minutes,

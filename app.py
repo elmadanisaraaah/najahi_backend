@@ -24,6 +24,7 @@ from routes.temoignages import temoignages_bp
 from routes.alerts import start_alert_scheduler
 from routes.mentors import mentors_bp
 from routes.documents import documents_bp
+from migrations import run_migrations
 
 def run_schema():
     schema_path = os.path.join(os.path.dirname(__file__), "models_sql", "auth_schema.sql")
@@ -46,6 +47,7 @@ mail.init_app(app)
 limiter.init_app(app)
 
 run_schema()
+run_migrations()
 
 CORS(app, resources={r"/api/*": {
     "origins": ["https://najahi-frontend.vercel.app", "http://localhost:5173", "*"],
