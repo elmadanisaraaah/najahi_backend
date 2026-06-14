@@ -1,0 +1,332 @@
+erDiagram
+
+    %% ── Core auth ────────────────────────────────────────────────────────────
+
+    users {
+        uuid id PK
+        varchar email
+        varchar role
+        varchar auth_provider
+        varchar status
+        boolean is_email_verified
+        varchar google_id
+    }
+
+    student_profiles {
+        uuid id PK
+        uuid user_id FK
+        varchar nom
+        varchar prenom
+        varchar ville
+        numeric moyenne_generale
+        boolean show_in_leaderboard
+    }
+
+    user_sessions {
+        uuid id PK
+        uuid user_id FK
+        text refresh_token_hash
+        timestamp expires_at
+        boolean is_revoked
+    }
+
+    oauth_accounts {
+        uuid id PK
+        uuid user_id FK
+        varchar provider
+        varchar provider_user_id
+    }
+
+    email_verification_tokens {
+        uuid id PK
+        uuid user_id FK
+        varchar code
+        timestamp expires_at
+        boolean is_used
+    }
+
+    password_reset_tokens {
+        uuid id PK
+        uuid user_id FK
+        timestamp expires_at
+        boolean is_used
+    }
+
+    phone_otp_codes {
+        uuid id PK
+        varchar phone_number
+        varchar otp_code
+        timestamp expires_at
+    }
+
+    %% ── Notifications & push ─────────────────────────────────────────────────
+
+    notifications {
+        uuid id PK
+        uuid user_id FK
+        varchar title
+        varchar type
+        text link
+        boolean is_read
+    }
+
+    push_subscriptions {
+        uuid id PK
+        uuid user_id FK
+        text endpoint
+        text p256dh
+        text auth_key
+    }
+
+    admin_settings {
+        varchar key PK
+        text value
+    }
+
+    %% ── Orientation ──────────────────────────────────────────────────────────
+
+    orientation_results {
+        uuid id PK
+        uuid user_id FK
+        varchar ecole
+        varchar filiere
+        float confidence
+        jsonb alternatives
+        jsonb raw_answers
+    }
+
+    %% ── Bulletins & notes ────────────────────────────────────────────────────
+
+    bulletins {
+        uuid id PK
+        uuid user_id FK
+        text original_name
+        text stored_name
+    }
+
+    bulletin_notes {
+        uuid id PK
+        uuid user_id FK
+        uuid bulletin_id FK
+        varchar matiere
+        numeric note
+        numeric coefficient
+    }
+
+    %% ── Forum ────────────────────────────────────────────────────────────────
+
+    forum_posts {
+        uuid id PK
+        uuid user_id FK
+        varchar title
+        varchar category
+        varchar school
+        integer likes
+        boolean is_pinned
+        boolean is_locked
+    }
+
+    forum_replies {
+        uuid id PK
+        uuid post_id FK
+        uuid user_id FK
+        uuid parent_reply_id FK
+        text content
+        integer likes
+    }
+
+    forum_likes {
+        uuid id PK
+        uuid user_id FK
+        uuid post_id FK
+        uuid reply_id FK
+    }
+
+    post_reactions {
+        uuid id PK
+        uuid user_id FK
+        uuid post_id FK
+        uuid reply_id FK
+        varchar reaction_type
+    }
+
+    %% ── Study rooms ──────────────────────────────────────────────────────────
+
+    study_rooms {
+        uuid id PK
+        uuid host_id FK
+        varchar nom
+        varchar sujet
+        varchar code_acces
+        boolean is_public
+        varchar category
+        integer pomodoro_work
+        integer pomodoro_break
+    }
+
+    study_room_participants {
+        uuid room_id FK
+        uuid student_id FK
+        boolean is_present
+        integer total_minutes
+        timestamp joined_at
+    }
+
+    solo_study_sessions {
+        uuid id PK
+        uuid user_id FK
+        timestamptz started_at
+        timestamptz ended_at
+        numeric duration_minutes
+    }
+
+    %% ── Private rooms ────────────────────────────────────────────────────────
+
+    private_rooms {
+        uuid id PK
+        uuid host_id FK
+        varchar name
+        varchar code
+        integer total_minutes
+        boolean is_active
+    }
+
+    private_room_members {
+        uuid id PK
+        uuid room_id FK
+        uuid user_id FK
+        boolean is_host
+        integer total_minutes
+    }
+
+    %% ── Mentors ──────────────────────────────────────────────────────────────
+
+    mentors {
+        uuid id PK
+        uuid user_id FK
+        varchar school
+        varchar filiere
+        boolean available
+    }
+
+    mentor_requests {
+        uuid id PK
+        uuid requester_id FK
+        uuid mentor_id FK
+        text message
+    }
+
+    %% ── Schools & content ────────────────────────────────────────────────────
+
+    etablissements {
+        uuid id PK
+        varchar nom
+        varchar secteur
+        varchar ville
+        numeric frais_annuels
+        numeric note_bac_min
+    }
+
+    schools_chat_history {
+        uuid id PK
+        uuid user_id FK
+        text question
+        text answer
+    }
+
+    shared_documents {
+        uuid id PK
+        uuid user_id FK
+        varchar title
+        varchar school
+        varchar type
+        boolean is_approved
+    }
+
+    temoignages {
+        uuid id PK
+        uuid user_id FK
+        varchar school
+        varchar filiere
+        integer rating
+        boolean is_approved
+    }
+
+    %% ── Concours ─────────────────────────────────────────────────────────────
+
+    concours_calendar {
+        uuid id PK
+        varchar name
+        varchar school
+        varchar category
+        date exam_date
+        date registration_end
+        boolean is_active
+    }
+
+    concours_subscriptions {
+        uuid id PK
+        uuid user_id FK
+        uuid concours_id FK
+    }
+
+    concours_alerts_sent {
+        uuid user_id FK
+        uuid concours_id FK
+        timestamp sent_at
+    }
+
+    %% ── Relationships ────────────────────────────────────────────────────────
+
+    %% Auth / profile
+    users ||--o{ student_profiles : "has"
+    users ||--o{ user_sessions : "has"
+    users ||--o{ oauth_accounts : "has"
+    users ||--o{ email_verification_tokens : "has"
+    users ||--o{ password_reset_tokens : "has"
+    users ||--o{ notifications : "receives"
+    users ||--o{ push_subscriptions : "has"
+
+    %% Orientation & bulletins
+    users ||--o{ orientation_results : "has"
+    users ||--o{ bulletins : "uploads"
+    users ||--o{ bulletin_notes : "has"
+    bulletins ||--o{ bulletin_notes : "contains"
+
+    %% Forum
+    users ||--o{ forum_posts : "writes"
+    users ||--o{ forum_replies : "writes"
+    users ||--o{ forum_likes : "gives"
+    users ||--o{ post_reactions : "gives"
+    forum_posts ||--o{ forum_replies : "has"
+    forum_posts ||--o{ forum_likes : "receives"
+    forum_posts ||--o{ post_reactions : "receives"
+    forum_replies ||--o{ forum_replies : "parent"
+    forum_replies ||--o{ forum_likes : "receives"
+    forum_replies ||--o{ post_reactions : "receives"
+
+    %% Study rooms
+    users ||--o{ study_rooms : "hosts"
+    users ||--o{ solo_study_sessions : "has"
+    study_rooms ||--o{ study_room_participants : "has"
+    student_profiles ||--o{ study_room_participants : "joins"
+
+    %% Private rooms
+    users ||--o{ private_rooms : "hosts"
+    users ||--o{ private_room_members : "joins"
+    private_rooms ||--o{ private_room_members : "has"
+
+    %% Mentors
+    users ||--o{ mentors : "becomes"
+    users ||--o{ mentor_requests : "sends"
+    mentors ||--o{ mentor_requests : "receives"
+
+    %% Schools & content
+    users ||--o{ schools_chat_history : "chats"
+    users ||--o{ shared_documents : "uploads"
+    users ||--o{ temoignages : "writes"
+
+    %% Concours
+    users ||--o{ concours_subscriptions : "subscribes"
+    concours_calendar ||--o{ concours_subscriptions : "has"
+    concours_calendar ||--o{ concours_alerts_sent : "tracks"
