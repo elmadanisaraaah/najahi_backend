@@ -1,11 +1,10 @@
 # SCHEMA - 31 tables
 
-
 ## admin_settings
 
 | Column | Type | Nullable | Default |
 |---|---|---|---|
-| key | character varying(100) | NO |  |
+| key | character varying | NO |  |
 | value | text | NO |  |
 | updated_at | timestamp without time zone | YES | now() |
 
@@ -18,16 +17,16 @@ PK: key
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | NO |  |
 | bulletin_id | uuid | YES |  |
-| matiere | character varying(120) | NO |  |
+| matiere | character varying | NO |  |
 | note | numeric | NO |  |
 | coefficient | numeric | YES |  |
 | created_at | timestamp with time zone | YES | now() |
 
 PK: id
 
-FK: user_id -> users.id
-
 FK: bulletin_id -> bulletins.id
+
+FK: user_id -> users.id
 
 ## bulletins
 
@@ -58,9 +57,9 @@ PK: user_id, concours_id
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| name | character varying(200) | NO |  |
-| school | character varying(150) | NO |  |
-| category | character varying(100) | NO |  |
+| name | character varying | NO |  |
+| school | character varying | NO |  |
+| category | character varying | NO |  |
 | registration_start | date | YES |  |
 | registration_end | date | YES |  |
 | exam_date | date | YES |  |
@@ -83,9 +82,9 @@ PK: id
 
 PK: id
 
-FK: user_id -> users.id
-
 FK: concours_id -> concours_calendar.id
+
+FK: user_id -> users.id
 
 ## email_verification_tokens
 
@@ -93,8 +92,8 @@ FK: concours_id -> concours_calendar.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | NO |  |
-| email | character varying(255) | YES |  |
-| code | character varying(10) | YES |  |
+| email | character varying | YES |  |
+| code | character varying | YES |  |
 | token_hash | text | YES |  |
 | expires_at | timestamp without time zone | NO |  |
 | created_at | timestamp without time zone | NO | now() |
@@ -109,21 +108,21 @@ FK: user_id -> users.id
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| nom | character varying(300) | NO |  |
-| sigle | character varying(50) | YES |  |
-| categorie | character varying(150) | YES |  |
-| secteur | character varying(100) | YES |  |
-| ville | character varying(150) | YES |  |
+| nom | character varying | NO |  |
+| sigle | character varying | YES |  |
+| categorie | character varying | YES |  |
+| secteur | character varying | YES |  |
+| ville | character varying | YES |  |
 | site_web | text | YES |  |
-| telephone | character varying(50) | YES |  |
+| telephone | character varying | YES |  |
 | adresse | text | YES |  |
 | frais_annuels | numeric | YES |  |
 | note_bac_min | numeric | YES |  |
 | filieres | ARRAY | YES |  |
 | debouches | ARRAY | YES |  |
 | concours | ARRAY | YES |  |
-| duree_etudes | character varying(50) | YES |  |
-| groupe | character varying(100) | YES |  |
+| duree_etudes | character varying | YES |  |
+| groupe | character varying | YES |  |
 | created_at | timestamp without time zone | YES | now() |
 
 PK: id
@@ -148,10 +147,10 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | YES |  |
-| title | character varying(300) | NO |  |
+| title | character varying | NO |  |
 | content | text | NO |  |
-| category | character varying(100) | NO |  |
-| school | character varying(150) | YES |  |
+| category | character varying | NO |  |
+| school | character varying | YES |  |
 | likes | integer | YES | 0 |
 | views | integer | YES | 0 |
 | created_at | timestamp without time zone | YES | now() |
@@ -177,11 +176,11 @@ FK: user_id -> users.id
 
 PK: id
 
+FK: parent_reply_id -> forum_replies.id
+
 FK: post_id -> forum_posts.id
 
 FK: user_id -> users.id
-
-FK: parent_reply_id -> forum_replies.id
 
 ## mentor_requests
 
@@ -195,9 +194,9 @@ FK: parent_reply_id -> forum_replies.id
 
 PK: id
 
-FK: requester_id -> users.id
-
 FK: mentor_id -> mentors.id
+
+FK: requester_id -> users.id
 
 ## mentors
 
@@ -205,8 +204,8 @@ FK: mentor_id -> mentors.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | YES |  |
-| school | character varying(200) | NO |  |
-| filiere | character varying(200) | NO |  |
+| school | character varying | NO |  |
+| filiere | character varying | NO |  |
 | bio | text | YES |  |
 | available | boolean | YES | true |
 | created_at | timestamp without time zone | YES | now() |
@@ -222,9 +221,9 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | YES |  |
-| title | character varying(200) | NO |  |
+| title | character varying | NO |  |
 | message | text | NO |  |
-| type | character varying(50) | YES | 'info'::character varying |
+| type | character varying | YES | 'info'::character varying |
 | link | text | YES |  |
 | is_read | boolean | YES | false |
 | created_at | timestamp with time zone | YES | now() |
@@ -239,8 +238,8 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | NO |  |
-| provider | character varying(50) | NO |  |
-| provider_user_id | character varying(255) | NO |  |
+| provider | character varying | NO |  |
+| provider_user_id | character varying | NO |  |
 | created_at | timestamp without time zone | NO | now() |
 
 PK: id
@@ -253,8 +252,8 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO |  |
 | user_id | uuid | NO |  |
-| ecole | character varying(255) | YES |  |
-| filiere | character varying(255) | YES |  |
+| ecole | character varying | YES |  |
+| filiere | character varying | YES |  |
 | confidence | double precision | YES |  |
 | alternatives | jsonb | YES |  |
 | raw_answers | jsonb | YES |  |
@@ -270,7 +269,7 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | NO |  |
-| token | character varying(255) | YES |  |
+| token | character varying | YES |  |
 | expires_at | timestamp without time zone | NO |  |
 | created_at | timestamp without time zone | NO | now() |
 | token_hash | text | YES |  |
@@ -285,8 +284,8 @@ FK: user_id -> users.id
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| phone_number | character varying(30) | NO |  |
-| otp_code | character varying(10) | NO |  |
+| phone_number | character varying | NO |  |
+| otp_code | character varying | NO |  |
 | expires_at | timestamp without time zone | NO |  |
 | created_at | timestamp without time zone | NO | now() |
 
@@ -300,7 +299,7 @@ PK: id
 | post_id | uuid | YES |  |
 | reply_id | uuid | YES |  |
 | user_id | uuid | YES |  |
-| reaction_type | character varying(20) | NO |  |
+| reaction_type | character varying | NO |  |
 | created_at | timestamp without time zone | YES | now() |
 
 PK: id
@@ -331,14 +330,14 @@ PK:
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | host_id | uuid | NO |  |
-| name | character varying(255) | NO |  |
-| code | character varying(10) | NO |  |
+| name | character varying | NO |  |
+| code | character varying | NO |  |
 | total_minutes | integer | YES | 25 |
 | max_participants | integer | YES | 4 |
 | is_active | boolean | YES | true |
 | created_at | timestamp without time zone | YES | now() |
 | updated_at | timestamp without time zone | YES | now() |
-| subject | character varying(100) | YES |  |
+| subject | character varying | YES |  |
 | description | text | YES |  |
 
 PK: 
@@ -378,9 +377,9 @@ FK: user_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | YES |  |
-| title | character varying(200) | NO |  |
-| school | character varying(150) | YES |  |
-| type | character varying(50) | NO | 'autre'::character varying |
+| title | character varying | NO |  |
+| school | character varying | YES |  |
+| type | character varying | NO | 'autre'::character varying |
 | file_url | text | NO |  |
 | is_approved | boolean | YES | false |
 | created_at | timestamp without time zone | YES | now() |
@@ -407,24 +406,24 @@ PK: id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | NO |  |
-| nom | character varying(120) | YES |  |
-| prenom | character varying(120) | YES |  |
-| niveau | character varying(120) | YES |  |
-| filiere | character varying(120) | YES |  |
+| nom | character varying | YES |  |
+| prenom | character varying | YES |  |
+| niveau | character varying | YES |  |
+| filiere | character varying | YES |  |
 | profile_photo_url | text | YES |  |
 | created_at | timestamp without time zone | NO | now() |
 | updated_at | timestamp without time zone | NO | now() |
-| telephone | character varying(20) | YES |  |
+| telephone | character varying | YES |  |
 | date_naissance | date | YES |  |
-| ville | character varying(100) | YES |  |
-| filiere_actuelle | character varying(100) | YES |  |
-| etablissement | character varying(150) | YES |  |
-| annee_scolaire | character varying(20) | YES |  |
+| ville | character varying | YES |  |
+| filiere_actuelle | character varying | YES |  |
+| etablissement | character varying | YES |  |
+| annee_scolaire | character varying | YES |  |
 | moyenne_generale | numeric | YES |  |
-| type_ecole | character varying(50) | YES |  |
-| nom_ecole | character varying(200) | YES |  |
+| type_ecole | character varying | YES |  |
+| nom_ecole | character varying | YES |  |
 | avatar_url | text | YES |  |
-| type_bac | character varying(100) | YES |  |
+| type_bac | character varying | YES |  |
 | note_bac | numeric | YES |  |
 | show_in_leaderboard | boolean | YES | false |
 
@@ -451,17 +450,19 @@ PK:
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | host_id | uuid | YES |  |
-| nom | character varying(150) | NO |  |
+| nom | character varying | NO |  |
 | description | text | YES |  |
-| sujet | character varying(100) | YES |  |
-| code_acces | character varying(10) | YES |  |
+| sujet | character varying | YES |  |
+| code_acces | character varying | YES |  |
 | max_participants | integer | YES | 10 |
 | is_public | boolean | YES | true |
 | is_active | boolean | YES | true |
 | created_at | timestamp with time zone | YES | now() |
 | closed_at | timestamp with time zone | YES |  |
-| category | character varying(20) | YES | 'general'::character varying |
-| tag | character varying(100) | YES |  |
+| category | character varying | YES | 'general'::character varying |
+| tag | character varying | YES |  |
+| pomodoro_work | integer | YES | 25 |
+| pomodoro_break | integer | YES | 5 |
 
 PK: id
 
@@ -473,9 +474,9 @@ FK: host_id -> users.id
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
 | user_id | uuid | YES |  |
-| school | character varying(150) | NO |  |
-| filiere | character varying(150) | YES |  |
-| annee_entree | character varying(10) | YES |  |
+| school | character varying | NO |  |
+| filiere | character varying | YES |  |
+| annee_entree | character varying | YES |  |
 | content | text | NO |  |
 | rating | integer | YES | 5 |
 | is_approved | boolean | YES | false |
@@ -496,7 +497,7 @@ FK: user_id -> users.id
 | created_at | timestamp without time zone | NO | now() |
 | refresh_token_hash | text | YES |  |
 | device_info | text | YES |  |
-| ip_address | character varying(50) | YES |  |
+| ip_address | character varying | YES |  |
 | user_agent | text | YES |  |
 | is_revoked | boolean | YES | false |
 
@@ -509,18 +510,19 @@ FK: user_id -> users.id
 | Column | Type | Nullable | Default |
 |---|---|---|---|
 | id | uuid | NO | gen_random_uuid() |
-| email | character varying(255) | YES |  |
+| email | character varying | YES |  |
 | password_hash | text | YES |  |
-| phone_number | character varying(30) | YES |  |
-| role | character varying(30) | NO | 'student'::character varying |
+| phone_number | character varying | YES |  |
+| role | character varying | NO | 'student'::character varying |
 | is_email_verified | boolean | NO | false |
 | is_phone_verified | boolean | NO | false |
-| auth_provider | character varying(30) | NO | 'email'::character varying |
-| status | character varying(20) | NO | 'active'::character varying |
+| auth_provider | character varying | NO | 'email'::character varying |
+| status | character varying | NO | 'active'::character varying |
 | last_login_at | timestamp without time zone | YES |  |
 | created_at | timestamp without time zone | NO | now() |
 | updated_at | timestamp without time zone | NO | now() |
-| google_id | character varying(255) | YES |  |
-| avatar_url | character varying(500) | YES |  |
+| google_id | character varying | YES |  |
+| avatar_url | character varying | YES |  |
 
 PK: id
+
