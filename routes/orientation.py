@@ -80,6 +80,7 @@ SCHOOL_WEBSITES = {
     "ehtp":         "http://www.ehtp.ac.ma",
     "ensa":         "https://ensa.um5.ac.ma",
     "encg":         "https://www.encg-settat.ac.ma",
+    "ensam":        "https://www.ensam.ac.ma",
     "est":          "https://www.ofppt.ma",
     "iscae":        "https://www.iscae.ac.ma",
     "medecine":     "https://fmp.um5.ac.ma",
@@ -109,9 +110,9 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "ingenieur_btp", "chercheur", "data_ia",
                     "ingenieur_logiciel", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 17.0,
+        "moyenne_min": 17.0,  # seuil CPGE entrée (CNC accès): ~17+ bac SM — cursussup.gov.ma 2025
         "concours": True,
-        "description": "La meilleure école d'ingénieurs publique du Maroc",
+        "description": "La meilleure école d'ingénieurs publique du Maroc — accès via CPGE puis Concours National Commun (CNC)",
         "career_paths": ["Ingénieur logiciel", "Chef de projet IT", "Directeur technique", "Consultant", "Entrepreneur tech"],
         "salary_range": "8 000 – 25 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -127,9 +128,9 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "data_ia", "telecoms_cyber", "product_ux",
                     "chercheur", "data_scientist", "ingenieur_logiciel", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 16.5,
+        "moyenne_min": 16.5,  # seuil CPGE entrée (CNC accès): ~16.5+ bac SM — cursussup.gov.ma 2025
         "concours": True,
-        "description": "La référence nationale en informatique et génie logiciel",
+        "description": "La référence nationale en informatique et génie logiciel — accès via CPGE puis CNC",
         "career_paths": ["Développeur full-stack", "Data Engineer", "Cybersécurité", "DevOps", "Product Manager"],
         "salary_range": "8 000 – 22 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -144,9 +145,9 @@ SCHOOLS_DB = [
         "secondary_domaines": ["ingenierie"],
         "careers": ["telecoms_cyber", "ingenieur_dev", "data_ia", "ingenieur_logiciel"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 16.0,
+        "moyenne_min": 16.0,  # seuil CPGE entrée (CNC accès): ~16+ bac SM — cursussup.gov.ma 2025
         "concours": True,
-        "description": "L'école des télécommunications et réseaux du Maroc",
+        "description": "L'école des télécommunications et réseaux du Maroc — accès via CPGE puis CNC",
         "career_paths": ["Ingénieur réseaux", "Expert cybersécurité", "Chef de projet télécom", "Architecte SI"],
         "salary_range": "7 000 – 20 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -162,9 +163,9 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_btp", "environnementaliste", "ingenieur_dev",
                     "chercheur", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 16.0,
+        "moyenne_min": 16.0,  # seuil CPGE entrée (CNC accès): ~16+ bac SM — cursussup.gov.ma 2025
         "concours": True,
-        "description": "L'école d'élite des travaux publics et génie civil",
+        "description": "L'école d'élite des travaux publics et génie civil — accès via CPGE puis CNC",
         "career_paths": ["Ingénieur civil", "Chef de chantier", "Urbaniste", "Consultant BTP"],
         "salary_range": "8 000 – 22 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -180,9 +181,9 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "ingenieur_btp", "telecoms_cyber",
                     "chercheur", "ingenieur_logiciel", "data_ia"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 14.5,
+        "moyenne_min": 12.0,  # seuil 2025 bac SM: 12.0 (PC/SVT ~14-15) — cursussup.gov.ma
         "concours": True,
-        "description": "Réseau de 8 écoles d'ingénieurs publiques à travers le Maroc",
+        "description": "Réseau de 8 écoles d'ingénieurs publiques à travers le Maroc — concours direct, bac SM recommandé",
         "career_paths": ["Ingénieur informatique", "Ingénieur civil", "Ingénieur industriel", "Chef de projet"],
         "salary_range": "7 000 – 18 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -197,10 +198,10 @@ SCHOOLS_DB = [
         "secondary_domaines": ["droit_sciences_sociales", "communication"],
         "careers": ["manager", "economiste", "entrepreneur", "fonctionnaire",
                     "analyste_financier", "product_ux"],
-        "bac_types": ["sciences_economiques", "sciences_maths", "sciences_physiques", "lettres"],
-        "moyenne_min": 14.0,
+        "bac_types": ["sciences_economiques", "sciences_maths", "sciences_physiques", "lettres", "sciences_biologiques", "bts_dut"],
+        "moyenne_min": 12.0,  # seuil 2025: TAFEM ouvert à tous bacs, ~12+ — cursussup.gov.ma
         "concours": True,
-        "description": "La grande école publique de commerce et gestion du Maroc",
+        "description": "La grande école publique de commerce et gestion du Maroc — concours TAFEM ouvert à tous les bacs",
         "career_paths": ["Responsable commercial", "Contrôleur de gestion", "Directeur marketing", "Entrepreneur"],
         "salary_range": "5 000 – 18 000 MAD/mois",
         "duration": "5 ans après bac",
@@ -232,9 +233,9 @@ SCHOOLS_DB = [
         "secondary_domaines": ["sciences"],
         "careers": ["medecin", "paramedical", "chercheur", "scientifique_chercheur"],
         "bac_types": ["sciences_biologiques", "sciences_physiques"],
-        "moyenne_min": 17.0,
+        "moyenne_min": 12.0,  # seuil 2025: 12.0 (était 13 en 2024, abaissé) — cursussup.gov.ma
         "concours": True,
-        "description": "La voie royale pour devenir médecin, pharmacien ou dentiste",
+        "description": "La voie royale pour devenir médecin, pharmacien ou dentiste — concours direct après bac SVT",
         "career_paths": ["Médecin généraliste", "Spécialiste", "Pharmacien", "Chirurgien-dentiste", "Chercheur médical"],
         "salary_range": "12 000 – 60 000 MAD/mois",
         "duration": "7–9 ans après bac",
@@ -324,9 +325,9 @@ SCHOOLS_DB = [
         "secondary_domaines": ["ingenierie"],
         "careers": ["architecte_designer", "architecte", "ingenieur_btp", "product_ux"],
         "bac_types": ["sciences_maths", "sciences_physiques", "lettres"],
-        "moyenne_min": 14.0,
+        "moyenne_min": 12.0,  # seuil 2025: >= 12.0 confirmé — cursussup.gov.ma
         "concours": True,
-        "description": "La voie officielle pour devenir architecte au Maroc",
+        "description": "La voie officielle pour devenir architecte au Maroc — concours national, bac SM/PC acceptés",
         "career_paths": ["Architecte", "Urbaniste", "Designer d'intérieur", "Chef de projet BTP"],
         "salary_range": "6 000 – 20 000 MAD/mois",
         "duration": "6 ans après bac",
@@ -342,9 +343,9 @@ SCHOOLS_DB = [
         "careers": ["ingenieur_dev", "chercheur", "ingenieur_btp", "data_ia",
                     "ingenieur_logiciel", "scientifique_chercheur"],
         "bac_types": ["sciences_maths", "sciences_physiques"],
-        "moyenne_min": 17.0,
+        "moyenne_min": 15.0,  # seuil entrée CPGE: >15 bac SM typiquement — cursussup.gov.ma 2025
         "concours": False,
-        "description": "2 ans intenses pour intégrer EMI, ENSIAS, ENSA via concours",
+        "description": "2 ans intenses pour intégrer EMI, ENSIAS, ENSA via Concours National Commun (CNC)",
         "career_paths": ["Ingénieur (après grande école)", "Chercheur", "Directeur technique"],
         "salary_range": "8 000 – 25 000 MAD/mois (après grande école)",
         "duration": "2 ans + grande école",
@@ -383,6 +384,24 @@ SCHOOLS_DB = [
         "career_paths": ["Directeur d'hôtel", "Guide touristique", "Chef de cuisine", "Event manager"],
         "salary_range": "4 000 – 14 000 MAD/mois",
         "duration": "3 ans après bac",
+    },
+    {
+        "id": "ensam",
+        "name": "ENSAM – École Nationale Supérieure d'Arts et Métiers",
+        "type": "engineering",
+        "city": ["Casablanca", "Meknès", "Rabat"],
+        "budget": "public",
+        "primary_domaines":   ["ingenierie", "technologie"],
+        "secondary_domaines": ["sciences", "environnement"],
+        "careers": ["ingenieur_btp", "ingenieur_dev", "chercheur", "ingenieur_logiciel",
+                    "scientifique_chercheur", "environnementaliste"],
+        "bac_types": ["sciences_maths", "sciences_physiques"],
+        "moyenne_min": 12.25,  # seuil 2025 bac SM: 12.25 (PC/SVT: ~16.17) — cursussup.gov.ma
+        "concours": True,
+        "description": "École publique de génie mécanique, industriel et électrique — concours direct bac SM (12.25+) ou via CPGE",
+        "career_paths": ["Ingénieur mécanique", "Ingénieur industriel", "Chef de projet", "Ingénieur électrique"],
+        "salary_range": "6 000 – 18 000 MAD/mois",
+        "duration": "5 ans après bac",
     },
     {
         "id": "est",
@@ -447,22 +466,22 @@ def score_school(school, data):
 
     # ── HARD EXCLUSIONS (return -999 immediately) ──────────────────────────
 
-    # Médecine: requires SVT bac AND note_bac >= 17, sante/sciences domain, right career
+    # Médecine: requires SVT bac, sante/sciences domain, right career, and >= 2025 threshold
     if school["id"] == "medecine":
         if domaine not in ("sante", "sciences"):
             return -999
         if bac_key != "sciences_biologiques":
             return -999
-        if moyenne < 17.0:
+        if moyenne < 12.0:  # seuil 2025 abaissé à 12 — cursussup.gov.ma
             return -999
         if carriere not in ("medecin", "paramedical", "chercheur", "scientifique_chercheur"):
             return -999
 
-    # CPGE: requires note_bac >= 17, Sciences Maths/Physiques only, no BTS/DUT
+    # CPGE: requires note_bac >= 15, Sciences Maths/Physiques only, no BTS/DUT
     if school["id"] == "cpge":
         if bac_key == "bts_dut":
             return -999
-        if moyenne < 17.0:
+        if moyenne < 15.0:
             return -999
         if domaine in ("sante", "business", "arts_design", "droit_sciences_sociales",
                        "communication", "education", "tourisme"):
