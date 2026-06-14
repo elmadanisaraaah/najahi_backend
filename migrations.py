@@ -86,6 +86,17 @@ def run_migrations():
                 ALTER TABLE study_rooms
                     ADD COLUMN IF NOT EXISTS tag VARCHAR(100)
             """)
+            # pomodoro_work / pomodoro_break: used in every study room list/create/join
+            # query in study.py but absent from the Railway-deployed table (the CREATE TABLE
+            # above only runs on fresh deploys; existing tables need explicit ALTERs).
+            cur.execute("""
+                ALTER TABLE study_rooms
+                    ADD COLUMN IF NOT EXISTS pomodoro_work INTEGER DEFAULT 25
+            """)
+            cur.execute("""
+                ALTER TABLE study_rooms
+                    ADD COLUMN IF NOT EXISTS pomodoro_break INTEGER DEFAULT 5
+            """)
 
             # ── study_room_participants ───────────────────────────────────────
             # Same situation: no CREATE TABLE in codebase, created manually.
