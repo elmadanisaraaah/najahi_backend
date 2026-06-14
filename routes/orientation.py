@@ -80,6 +80,7 @@ SCHOOL_WEBSITES = {
     "ehtp":         "http://www.ehtp.ac.ma",
     "ensa":         "https://ensa.um5.ac.ma",
     "encg":         "https://www.encg-settat.ac.ma",
+    "est":          "https://www.ofppt.ma",
     "iscae":        "https://www.iscae.ac.ma",
     "medecine":     "https://fmp.um5.ac.ma",
     "um6p":         "https://www.um6p.ma",
@@ -251,6 +252,7 @@ SCHOOLS_DB = [
         "bac_types": ["sciences_maths", "sciences_physiques"],
         "moyenne_min": 15.0,
         "concours": True,
+        "international_partnerships": True,
         "description": "Université d'excellence africaine avec bourses disponibles",
         "career_paths": ["Chercheur en IA", "Ingénieur agronome", "Data Scientist", "Ingénieur mines", "Chef de projet R&D"],
         "salary_range": "10 000 – 30 000 MAD/mois",
@@ -262,13 +264,14 @@ SCHOOLS_DB = [
         "type": "engineering",
         "city": ["Rabat"],
         "budget": "prive",
-        "primary_domaines":   ["technologie", "ingenierie", "arts_design", "business"],
-        "secondary_domaines": ["droit_sciences_sociales", "sante", "communication"],
+        "primary_domaines":   ["technologie", "ingenierie"],
+        "secondary_domaines": ["arts_design", "business", "droit_sciences_sociales", "sante", "communication"],
         "careers": ["ingenieur_dev", "architecte_designer", "manager", "medecin",
                     "telecoms_cyber", "data_ia", "product_ux", "ingenieur_logiciel"],
         "bac_types": ["sciences_maths", "sciences_physiques", "sciences_economiques", "lettres"],
         "moyenne_min": 12.0,
         "concours": False,
+        "international_partnerships": True,
         "description": "Université privée internationale avec partenariats mondiaux",
         "career_paths": ["Ingénieur aéronautique", "Architecte", "Manager international", "Avocat d'affaires"],
         "salary_range": "8 000 – 25 000 MAD/mois",
@@ -305,6 +308,7 @@ SCHOOLS_DB = [
         "bac_types": ["sciences_economiques", "sciences_maths", "lettres", "sciences_physiques"],
         "moyenne_min": 12.0,
         "concours": False,
+        "international_partnerships": True,
         "description": "La grande école de management privée de référence au Maroc",
         "career_paths": ["Directeur commercial", "Responsable marketing", "Entrepreneur", "Consultant"],
         "salary_range": "5 000 – 20 000 MAD/mois",
@@ -380,6 +384,24 @@ SCHOOLS_DB = [
         "salary_range": "4 000 – 14 000 MAD/mois",
         "duration": "3 ans après bac",
     },
+    {
+        "id": "est",
+        "name": "EST / BTS Informatique – École Supérieure de Technologie",
+        "type": "university",
+        "city": ["Agadir", "Casablanca", "Fès", "Kenitra", "Marrakech", "Meknès", "Oujda", "Rabat", "Salé", "Tanger", "Tétouan"],
+        "budget": "public",
+        "primary_domaines":   ["technologie"],
+        "secondary_domaines": ["ingenierie", "business"],
+        "careers": ["ingenieur_dev", "telecoms_cyber", "ingenieur_logiciel", "data_ia", "product_ux"],
+        "bac_types": ["sciences_maths", "sciences_physiques", "bts_dut"],
+        "moyenne_min": 11.0,
+        "moyenne_max": 14.5,
+        "concours": False,
+        "description": "Formation technologique publique bac+2/bac+3, présente dans toutes les grandes villes",
+        "career_paths": ["Développeur web", "Technicien réseau", "Administrateur systèmes", "Support IT"],
+        "salary_range": "3 500 – 10 000 MAD/mois",
+        "duration": "2–3 ans après bac",
+    },
 ]
 
 
@@ -452,6 +474,10 @@ def score_school(school, data):
     if moyenne < school["moyenne_min"]:
         return -999
 
+    # Hard maximum grade check: student is overqualified for vocational/short tracks
+    if school.get("moyenne_max") and moyenne > school["moyenne_max"]:
+        return -999
+
     # Architecture: only for arts_design/ingenierie
     if school["id"] == "architecture":
         if domaine not in ("arts_design", "ingenierie"):
@@ -520,7 +546,7 @@ def score_school(school, data):
         elif school["budget"] == "semi_public":
             score += 4
         else:
-            score -= 8
+            score -= 15
     elif budget == "semi_public":
         if school["budget"] in ("public", "semi_public"):
             score += 8
@@ -598,7 +624,7 @@ def score_school(school, data):
             score -= 5
 
     if etudier_etranger in ("oui", "peut_etre"):
-        if school["id"] in ("uir", "um6p"):
+        if school.get("international_partnerships"):
             score += 12
         elif school.get("budget") == "prive":
             score += 5
@@ -618,7 +644,7 @@ def score_school(school, data):
         if school["id"] in ("hem", "encg", "uir", "iscae", "emsi"):
             score += 10
     elif secteur_travail == "international":
-        if school["id"] in ("uir", "um6p", "hem"):
+        if school.get("international_partnerships"):
             score += 12
 
     if niveau_tech == "passionne":
@@ -658,7 +684,7 @@ def score_school(school, data):
             score += 30
 
     if budget == "public" and school.get("budget") == "prive":
-        score -= 15
+        score -= 25
 
     if budget in ("prive_premium", "prive_abordable") and etudier_etranger in ("oui", "peut_etre"):
         if school["id"] in ("uir", "um6p"):
