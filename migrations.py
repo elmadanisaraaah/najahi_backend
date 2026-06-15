@@ -123,6 +123,11 @@ def run_migrations():
                 ALTER TABLE study_room_participants
                     ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ
             """)
+            # status: pending/accepted/rejected — used by join-approval system
+            cur.execute("""
+                ALTER TABLE study_room_participants
+                    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'accepted'
+            """)
 
             # ── forum_posts ───────────────────────────────────────────────────
             # Created lazily by forum.py on first forum request.

@@ -4,6 +4,10 @@ from flask_socketio import emit, join_room, leave_room
 # In-memory store: { room_id: { "participants": [...], "permissions": {"camera": False, "mic": False}, "timer": {...} } }
 rooms = {}
 
+# Module-level reference so study.py can emit without circular imports
+socketio_instance = None
+
+
 def get_room(room_id):
     if room_id not in rooms:
         rooms[room_id] = {
@@ -18,6 +22,8 @@ def get_room(room_id):
     return rooms[room_id]
 
 def register_socket_events(socketio):
+    global socketio_instance
+    socketio_instance = socketio
 
     # ── Join room ──────────────────────────────────────────────────────────────
     @socketio.on("join_room")

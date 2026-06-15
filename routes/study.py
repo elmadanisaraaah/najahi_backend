@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, g
 from psycopg2.extras import RealDictCursor
 from db import get_conn, release_conn
 from middleware import token_required
+from routes.socket_events import socketio_instance, get_room
 
 _SOLO_TABLE_CREATED = False
 
@@ -70,6 +71,39 @@ def list_rooms():
         cur.close(); release_conn(conn)
 
 
+# ── GET /api/study/rooms/<id> — single room ─────────────────
+@study_bp.route('/rooms/<room_id>', methods=['GET'])
+@token_required
+def get_room_detail(room_id):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT r.id, r.nom, r.sujet, r.code_acces, r.max_participants,
+                   r.pomodoro_work, r.pomodoro_break, r.category, r.tag,
+                   r.is_public, r.host_id,
+                   COUNT(p.student_id) FILTER (WHERE p.is_present) AS participant_count
+            FROM study_rooms r
+            LEFT JOIN study_room_participants p ON p.room_id = r.id
+            WHERE r.id = %s AND r.is_active = TRUE
+            GROUP BY r.id
+        ''', (room_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({'error': 'Salle introuvable'}), 404
+        cols = ['id','nom','sujet','code_acces','max_participants',
+                'pomodoro_work','pomodoro_break','category','tag','is_public',
+                'host_id','participant_count']
+        room = dict(zip(cols, row))
+        room['id']      = str(room['id'])
+        room['host_id'] = str(room['host_id']) if room['host_id'] else None
+        return jsonify(room), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
 # ── POST /api/study/rooms — create ──────────────────────────
 @study_bp.route('/rooms', methods=['POST'])
 @token_required
@@ -110,7 +144,7 @@ def create_room():
               data.get('sujet') or None,
               code,
               data.get('max_participants', 10),
-              data.get('is_public', True),
+              data.get('is_public', False),  # private by default — pass is_public=true to list in Explorer
               data.get('pomodoro_work', 25),
               data.get('pomodoro_break', 5),
               category, tag))
@@ -225,17 +259,30 @@ def join_room(room_id):
 
     conn = get_conn()
     try:
-        cur = conn.cursor()
-        cur.execute('SELECT id FROM student_profiles WHERE user_id = %s', (user_id,))
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('SELECT id, prenom, nom FROM student_profiles WHERE user_id = %s', (user_id,))
         profile = cur.fetchone()
         if not profile:
             return jsonify({'error': 'Profil introuvable'}), 404
+
+        profile_id = str(profile['id'])
+        name = ((profile.get('prenom') or '') + ' ' + (profile.get('nom') or '')).strip() or 'Anonyme'
+
         cur.execute('''
-            INSERT INTO study_room_participants (room_id, student_id)
-            VALUES (%s, %s) ON CONFLICT (room_id, student_id)
-            DO UPDATE SET is_present = TRUE, joined_at = NOW()
-        ''', (room_id, str(profile[0])))
+            INSERT INTO study_room_participants (room_id, student_id, status)
+            VALUES (%s, %s, 'accepted') ON CONFLICT (room_id, student_id)
+            DO UPDATE SET is_present = TRUE, joined_at = NOW(), status = 'accepted'
+        ''', (room_id, profile_id))
         conn.commit()
+
+        # Notify all participants in the socket room
+        if socketio_instance:
+            socketio_instance.emit('participant_joined', {
+                'user_id': str(user_id),
+                'profile_id': profile_id,
+                'name': name,
+            }, room=room_id)
+
         return jsonify({'ok': True}), 200
     except Exception as e:
         conn.rollback()
@@ -256,13 +303,223 @@ def leave_room(room_id):
         cur.execute('SELECT id FROM student_profiles WHERE user_id = %s', (user_id,))
         profile = cur.fetchone()
         if profile:
+            profile_id = str(profile[0])
             cur.execute('''
                 UPDATE study_room_participants
                 SET is_present = FALSE, left_at = NOW()
                 WHERE room_id = %s AND student_id = %s
-            ''', (room_id, str(profile[0])))
+            ''', (room_id, profile_id))
             conn.commit()
+
+            if socketio_instance:
+                socketio_instance.emit('participant_left', {
+                    'user_id': str(user_id),
+                    'profile_id': profile_id,
+                }, room=room_id)
+
         return jsonify({'ok': True}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/study/rooms/<id>/request-join ─────────────────
+@study_bp.route('/rooms/<room_id>/request-join', methods=['POST'])
+@token_required
+def request_join(room_id):
+    """Creates a pending join request; host must approve before the user enters."""
+    user_id = g.current_user["id"]
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute('''
+            SELECT r.id, r.nom, r.host_id,
+                   sp_host.user_id AS host_user_id
+            FROM study_rooms r
+            JOIN student_profiles sp_host ON sp_host.id = r.host_id
+            WHERE r.id = %s AND r.is_active = TRUE
+        ''', (room_id,))
+        room = cur.fetchone()
+        if not room:
+            return jsonify({'error': 'Salle introuvable'}), 404
+
+        cur.execute('SELECT id, prenom, nom FROM student_profiles WHERE user_id = %s', (user_id,))
+        profile = cur.fetchone()
+        if not profile:
+            return jsonify({'error': 'Profil introuvable'}), 404
+
+        profile_id = str(profile['id'])
+        name = ((profile.get('prenom') or '') + ' ' + (profile.get('nom') or '')).strip() or 'Anonyme'
+
+        # If already a member (accepted), return directly
+        cur.execute('''
+            SELECT status FROM study_room_participants
+            WHERE room_id = %s AND student_id = %s
+        ''', (room_id, profile_id))
+        existing = cur.fetchone()
+        if existing and existing['status'] == 'accepted':
+            return jsonify({'status': 'accepted', 'message': 'Déjà membre'}), 200
+
+        # Create or update to pending
+        cur.execute('''
+            INSERT INTO study_room_participants (room_id, student_id, status, is_present)
+            VALUES (%s, %s, 'pending', FALSE)
+            ON CONFLICT (room_id, student_id)
+            DO UPDATE SET status = 'pending', joined_at = NOW()
+        ''', (room_id, profile_id))
+        conn.commit()
+
+        # Notify the host via socket
+        if socketio_instance:
+            socketio_instance.emit('join_request', {
+                'room_id': room_id,
+                'user_id': str(user_id),
+                'profile_id': profile_id,
+                'name': name,
+            }, room=room_id)
+
+        return jsonify({'status': 'pending', 'message': 'Demande envoyée à l\'hôte'}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── GET /api/study/rooms/<id>/requests ───────────────────────
+@study_bp.route('/rooms/<room_id>/requests', methods=['GET'])
+@token_required
+def get_join_requests(room_id):
+    """Returns pending join requests for the host."""
+    user_id = g.current_user["id"]
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Verify caller is host
+        cur.execute('''
+            SELECT r.id FROM study_rooms r
+            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
+            WHERE r.id = %s
+        ''', (str(user_id), room_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
+
+        cur.execute('''
+            SELECT sp.id AS profile_id, sp.prenom, sp.nom, sp.user_id,
+                   srp.joined_at
+            FROM study_room_participants srp
+            JOIN student_profiles sp ON sp.id = srp.student_id
+            WHERE srp.room_id = %s AND srp.status = 'pending'
+            ORDER BY srp.joined_at ASC
+        ''', (room_id,))
+        rows = cur.fetchall()
+        requests = [{
+            'profile_id': str(r['profile_id']),
+            'user_id':    str(r['user_id']),
+            'name': ((r.get('prenom') or '') + ' ' + (r.get('nom') or '')).strip() or 'Anonyme',
+            'joined_at':  r['joined_at'].isoformat() if r['joined_at'] else None,
+        } for r in rows]
+        return jsonify(requests), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/study/rooms/<id>/requests/<profile_id>/accept ──
+@study_bp.route('/rooms/<room_id>/requests/<profile_id>/accept', methods=['POST'])
+@token_required
+def accept_join_request(room_id, profile_id):
+    user_id = g.current_user["id"]
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute('''
+            SELECT r.id FROM study_rooms r
+            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
+            WHERE r.id = %s
+        ''', (str(user_id), room_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
+
+        cur.execute('''
+            UPDATE study_room_participants
+            SET status = 'accepted', is_present = TRUE, joined_at = NOW()
+            WHERE room_id = %s AND student_id = %s AND status = 'pending'
+        ''', (room_id, profile_id))
+        conn.commit()
+
+        # Fetch requester name for notification
+        cur.execute('SELECT prenom, nom, user_id FROM student_profiles WHERE id = %s', (profile_id,))
+        p = cur.fetchone()
+        name = ((p.get('prenom') or '') + ' ' + (p.get('nom') or '')).strip() if p else 'Anonyme'
+
+        if socketio_instance:
+            socketio_instance.emit('join_decision', {
+                'room_id':    room_id,
+                'profile_id': profile_id,
+                'user_id':    str(p['user_id']) if p else None,
+                'decision':   'accepted',
+                'name':       name,
+            }, room=room_id)
+
+        return jsonify({'ok': True}), 200
+
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cur.close(); release_conn(conn)
+
+
+# ── POST /api/study/rooms/<id>/requests/<profile_id>/reject ──
+@study_bp.route('/rooms/<room_id>/requests/<profile_id>/reject', methods=['POST'])
+@token_required
+def reject_join_request(room_id, profile_id):
+    user_id = g.current_user["id"]
+
+    conn = get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute('''
+            SELECT r.id FROM study_rooms r
+            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
+            WHERE r.id = %s
+        ''', (str(user_id), room_id))
+        if not cur.fetchone():
+            return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
+
+        cur.execute('''
+            UPDATE study_room_participants
+            SET status = 'rejected', is_present = FALSE
+            WHERE room_id = %s AND student_id = %s AND status = 'pending'
+        ''', (room_id, profile_id))
+        conn.commit()
+
+        cur.execute('SELECT user_id FROM student_profiles WHERE id = %s', (profile_id,))
+        p = cur.fetchone()
+
+        if socketio_instance:
+            socketio_instance.emit('join_decision', {
+                'room_id':    room_id,
+                'profile_id': profile_id,
+                'user_id':    str(p['user_id']) if p else None,
+                'decision':   'rejected',
+            }, room=room_id)
+
+        return jsonify({'ok': True}), 200
+
     except Exception as e:
         conn.rollback()
         return jsonify({'error': str(e)}), 500
