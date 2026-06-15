@@ -92,6 +92,7 @@ SCHOOL_WEBSITES = {
     "cpge":         "https://www.men.gov.ma",
     "fsjes":        "https://fsjes.um5.ac.ma",
     "tourisme":     "https://www.ofppt.ma",
+    "faculte":      "https://www.enssup.gov.ma",
 }
 
 # ── Schools database ──────────────────────────────────────────────────────────
@@ -361,11 +362,31 @@ SCHOOLS_DB = [
         "careers": ["juriste", "fonctionnaire", "economiste", "enseignant",
                     "avocat", "professeur"],
         "bac_types": ["sciences_economiques", "sciences_maths", "lettres", "sciences_physiques", "bts_dut"],
-        "moyenne_min": 10.0,
+        "moyenne_min": 0.0,  # open access: any bac holder accepted, no minimum grade
         "concours": False,
         "description": "Faculté publique ouverte à tous les profils",
         "career_paths": ["Avocat", "Juge", "Fonctionnaire d'État", "Expert-comptable", "Économiste"],
         "salary_range": "4 000 – 15 000 MAD/mois",
+        "duration": "3–5 ans après bac",
+    },
+    {
+        "id": "faculte",
+        "name": "Faculté des Sciences / FST / FSTE",
+        "type": "university",
+        "city": ["Rabat", "Casablanca", "Fès", "Marrakech", "Oujda", "Tanger", "Meknès",
+                 "Agadir", "El Jadida", "Kénitra", "Tétouan", "Errachidia"],
+        "budget": "public",
+        "primary_domaines":   ["sciences", "technologie"],
+        "secondary_domaines": ["ingenierie", "environnement", "sante"],
+        "careers": ["chercheur", "enseignant", "ingenieur_dev", "scientifique_chercheur",
+                    "professeur", "environnementaliste", "paramedical"],
+        "bac_types": ["sciences_maths", "sciences_physiques", "sciences_biologiques",
+                      "sciences_economiques", "lettres", "bts_dut"],
+        "moyenne_min": 0.0,  # open access: any bac holder accepted
+        "concours": False,
+        "description": "Faculté publique ouverte à tout bachelier, présente dans toutes les grandes villes — Sciences, Techniques, SVT",
+        "career_paths": ["Enseignant-chercheur", "Ingénieur d'études", "Technicien de labo", "Chercheur scientifique"],
+        "salary_range": "4 000 – 12 000 MAD/mois",
         "duration": "3–5 ans après bac",
     },
     {
@@ -719,10 +740,10 @@ def recommend_schools(data, top_n=5):
         scored.append((s, school))
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Filter hard exclusions
+    # Filter hard exclusions (score == -999 means "never recommend")
     valid = [(s, sch) for s, sch in scored if s > -100]
-    if len(valid) < top_n:
-        valid = scored  # fallback: take whatever we have
+    # Never fall back to hard-excluded schools — with open-access options in SCHOOLS_DB
+    # there will always be at least one valid result for any bac holder.
 
     top = valid[:top_n]
     pct_bases = [92, 78, 64, 54, 46]
