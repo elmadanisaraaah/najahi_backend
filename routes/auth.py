@@ -136,9 +136,11 @@ def register():
 
         conn.commit()
 
+        email_sent = False
         try:
             send_verification_email(email, verification_code)
             print(f"[AUTH] Verification email delivered to {email}")
+            email_sent = True
         except Exception as email_err:
             print(f"[AUTH] Verification email FAILED for {email}: {email_err}")
             # Non-fatal: token is stored, user can use resend-verification
@@ -156,6 +158,7 @@ def register():
 
         return jsonify({
             "message": "Compte créé. Vérifiez votre email avec le code envoyé.",
+            "email_sent": email_sent,
             "user": {
                 "id":                str(user["id"]),
                 "email":             user["email"],
@@ -244,10 +247,12 @@ def resend_verification():
     conn = get_conn()
     cur  = conn.cursor(cursor_factory=RealDictCursor)
     try:
-        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+        cur.execute("SELECT id, is_email_verified FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
         if not user:
             return jsonify({"message": "Si ce compte existe, un code a été envoyé."}), 200
+        if user["is_email_verified"]:
+            return jsonify({"message": "Cet email est déjà vérifié. Tu peux te connecter."}), 200
 
         verification_code      = generate_numeric_code(6)
         verification_code_hash = hash_token(verification_code)

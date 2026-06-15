@@ -23,6 +23,14 @@ def send_email(to_email, subject, html_content):
         print("[EMAIL] ERROR: RESEND_API_KEY is not set or empty — email not sent")
         raise RuntimeError("RESEND_API_KEY manquant")
 
+    if from_addr == _FALLBACK_FROM:
+        print(
+            "[EMAIL] WARNING: RESEND_FROM env var is not set — using Resend test sender "
+            f"({_FALLBACK_FROM}). This sender only delivers to the Resend account owner's "
+            "email. Set RESEND_FROM to a verified-domain address (e.g. noreply@najahi.ma) "
+            "for all other recipients."
+        )
+
     print(f"[EMAIL] Sending to={to_email!r}  from={from_addr!r}  subject={subject!r}")
 
     try:
