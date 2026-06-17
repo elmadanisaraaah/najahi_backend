@@ -20,7 +20,7 @@ def send_email(to_email, subject, html_content):
     from_addr = os.environ.get("RESEND_FROM", "").strip() or _FALLBACK_FROM
 
     if not api_key:
-        print("[EMAIL] ERROR: RESEND_API_KEY is not set or empty — email not sent")
+        print("[EMAIL] ERROR: RESEND_API_KEY is not set or empty — email not sent", flush=True)
         raise RuntimeError("RESEND_API_KEY manquant")
 
     if from_addr == _FALLBACK_FROM:
@@ -28,10 +28,11 @@ def send_email(to_email, subject, html_content):
             "[EMAIL] WARNING: RESEND_FROM env var is not set — using Resend test sender "
             f"({_FALLBACK_FROM}). This sender only delivers to the Resend account owner's "
             "email. Set RESEND_FROM to a verified-domain address (e.g. noreply@najahi.ma) "
-            "for all other recipients."
+            "for all other recipients.",
+            flush=True,
         )
 
-    print(f"[EMAIL] Sending to={to_email!r}  from={from_addr!r}  subject={subject!r}")
+    print(f"[EMAIL] Sending to={to_email!r}  from={from_addr!r}  subject={subject!r}", flush=True)
 
     try:
         response = requests.post(
@@ -52,7 +53,7 @@ def send_email(to_email, subject, html_content):
         print(f"[EMAIL] HTTP error contacting Resend: {exc}")
         raise
 
-    print(f"[EMAIL] Resend status={response.status_code}  body={response.text[:500]}")
+    print(f"[EMAIL] Resend status={response.status_code}  body={response.text[:500]}", flush=True)
 
     if response.status_code not in (200, 201):
         raise RuntimeError(

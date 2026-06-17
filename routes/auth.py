@@ -136,13 +136,14 @@ def register():
 
         conn.commit()
 
+        print(f"[AUTH] Attempting verification email to {email}", flush=True)
         email_sent = False
         try:
             send_verification_email(email, verification_code)
-            print(f"[AUTH] Verification email delivered to {email}")
+            print(f"[AUTH] Verification email delivered to {email}", flush=True)
             email_sent = True
         except Exception as email_err:
-            print(f"[AUTH] Verification email FAILED for {email}: {email_err}")
+            print(f"[AUTH] Verification email FAILED for {email}: {email_err}", flush=True)
             # Non-fatal: token is stored, user can use resend-verification
 
         try:
@@ -266,9 +267,9 @@ def resend_verification():
 
         try:
             send_verification_email(email, verification_code)
-            print(f"[AUTH] Resend verification email delivered to {email}")
+            print(f"[AUTH] Resend verification email delivered to {email}", flush=True)
         except Exception as e:
-            print(f"[AUTH] Resend verification email FAILED for {email}: {e}")
+            print(f"[AUTH] Resend verification email FAILED for {email}: {e}", flush=True)
 
         return jsonify({"message": "Code renvoyé."}), 200
 
