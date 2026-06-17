@@ -157,7 +157,7 @@ def update_me():
         return jsonify({"error": "Aucun champ à mettre à jour"}), 400
 
     set_clause = ", ".join(f"{k} = %s" for k in fields)
-    values = list(fields.values()) + [g.current_user["id"]]
+    values     = list(fields.values()) + [g.current_user["id"]]
 
     conn = get_conn()
     try:
@@ -166,10 +166,24 @@ def update_me():
                 f"UPDATE student_profiles SET {set_clause} WHERE user_id = %s",
                 values,
             )
+            print(f"[PROFILE] update_me  user={g.current_user['id']}  fields={list(fields.keys())}  rowcount={cur.rowcount}", flush=True)
+
+            if cur.rowcount == 0:
+                # No student_profiles row yet — insert one with the supplied fields.
+                # This covers Google-OAuth users and any edge-case registration gaps.
+                ins_cols = "user_id, " + ", ".join(fields.keys())
+                ins_phs  = ", ".join(["%s"] * (len(fields) + 1))
+                cur.execute(
+                    f"INSERT INTO student_profiles ({ins_cols}) VALUES ({ins_phs})",
+                    [g.current_user["id"]] + list(fields.values()),
+                )
+                print(f"[PROFILE] created missing student_profiles row for user={g.current_user['id']}", flush=True)
+
             conn.commit()
         return jsonify({"message": "Profil mis à jour"}), 200
     except Exception as e:
         conn.rollback()
+        print(f"[PROFILE] update_me error: {e}", flush=True)
         return jsonify({"error": str(e)}), 500
     finally:
         release_conn(conn)
@@ -390,10 +404,36 @@ def extract_bulletin_notes():
         return jsonify({"ok": False, "error": "Service OCR non configuré"}), 200
 
     with open(filepath, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("utf-8")
+        raw_bytes = f.read()
 
     ext = row[0].rsplit(".", 1)[-1].lower() if "." in row[0] else "pdf"
-    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(ext, "application/pdf")
+
+    # Pixtral only accepts images (PNG/JPEG/WebP), not raw PDFs.
+    # Convert the first page of any PDF to PNG in-memory using PyMuPDF.
+    if ext == "pdf":
+        try:
+            import fitz  # PyMuPDF
+            doc = fitz.open(stream=raw_bytes, filetype="pdf")
+            if doc.page_count == 0:
+                doc.close()
+                return jsonify({"ok": False, "error": "PDF vide — saisis les notes manuellement."}), 200
+            page = doc[0]
+            # 2× scale → ~150 dpi effective resolution, good for OCR
+            pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+            png_bytes = pix.tobytes("png")
+            page_count = doc.page_count
+            doc.close()
+            b64  = base64.b64encode(png_bytes).decode("utf-8")
+            mime = "image/png"
+            print(f"[OCR] PDF→PNG ok  pages={page_count}  png_size={len(png_bytes)}", flush=True)
+        except ImportError:
+            return jsonify({"ok": False, "error": "Conversion PDF indisponible — saisis les notes manuellement."}), 200
+        except Exception as pdf_exc:
+            print(f"[OCR] PDF→PNG error: {pdf_exc}", flush=True)
+            return jsonify({"ok": False, "error": "Conversion PDF échouée — saisis les notes manuellement."}), 200
+    else:
+        b64  = base64.b64encode(raw_bytes).decode("utf-8")
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(ext, "image/jpeg")
 
     prompt = (
         "Analyse ce bulletin scolaire marocain et extrais les notes. "
