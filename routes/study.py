@@ -236,11 +236,21 @@ def join_by_code():
         cur.execute('SELECT id FROM student_profiles WHERE user_id = %s', (user_id,))
         profile = cur.fetchone()
         if profile:
-            cur.execute('''
-                INSERT INTO study_room_participants (room_id, student_id)
-                VALUES (%s, %s) ON CONFLICT (room_id, student_id)
-                DO UPDATE SET is_present = TRUE, joined_at = NOW()
-            ''', (room['id'], str(profile[0])))
+            pid = str(profile[0])
+            cur.execute(
+                'SELECT 1 FROM study_room_participants WHERE room_id = %s AND student_id = %s',
+                (room['id'], pid)
+            )
+            if cur.fetchone():
+                cur.execute(
+                    'UPDATE study_room_participants SET is_present = TRUE, joined_at = NOW() WHERE room_id = %s AND student_id = %s',
+                    (room['id'], pid)
+                )
+            else:
+                cur.execute(
+                    'INSERT INTO study_room_participants (room_id, student_id) VALUES (%s, %s)',
+                    (room['id'], pid)
+                )
             conn.commit()
 
         return jsonify(room), 200
@@ -268,11 +278,20 @@ def join_room(room_id):
         profile_id = str(profile['id'])
         name = ((profile.get('prenom') or '') + ' ' + (profile.get('nom') or '')).strip() or 'Anonyme'
 
-        cur.execute('''
-            INSERT INTO study_room_participants (room_id, student_id, status)
-            VALUES (%s, %s, 'accepted') ON CONFLICT (room_id, student_id)
-            DO UPDATE SET is_present = TRUE, joined_at = NOW(), status = 'accepted'
-        ''', (room_id, profile_id))
+        cur.execute(
+            'SELECT 1 FROM study_room_participants WHERE room_id = %s AND student_id = %s',
+            (room_id, profile_id)
+        )
+        if cur.fetchone():
+            cur.execute(
+                'UPDATE study_room_participants SET is_present = TRUE, joined_at = NOW() WHERE room_id = %s AND student_id = %s',
+                (room_id, profile_id)
+            )
+        else:
+            cur.execute(
+                'INSERT INTO study_room_participants (room_id, student_id) VALUES (%s, %s)',
+                (room_id, profile_id)
+            )
         conn.commit()
 
         # Notify all participants in the socket room
