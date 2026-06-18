@@ -355,12 +355,11 @@ def request_join(room_id):
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # host_id stores users.id directly (no JOIN to student_profiles needed)
         cur.execute('''
-            SELECT r.id, r.nom, r.host_id,
-                   sp_host.user_id AS host_user_id
-            FROM study_rooms r
-            JOIN student_profiles sp_host ON sp_host.id = r.host_id
-            WHERE r.id = %s AND r.is_active = TRUE
+            SELECT id, nom, host_id AS host_user_id
+            FROM study_rooms
+            WHERE id = %s AND is_active = TRUE
         ''', (room_id,))
         room = cur.fetchone()
         if not room:
@@ -374,22 +373,19 @@ def request_join(room_id):
         profile_id = str(profile['id'])
         name = ((profile.get('prenom') or '') + ' ' + (profile.get('nom') or '')).strip() or 'Anonyme'
 
-        # If already a member (accepted), return directly
-        cur.execute('''
-            SELECT status FROM study_room_participants
-            WHERE room_id = %s AND student_id = %s
-        ''', (room_id, profile_id))
-        existing = cur.fetchone()
-        if existing and existing['status'] == 'accepted':
+        # If already a participant, return directly
+        cur.execute(
+            'SELECT 1 FROM study_room_participants WHERE room_id = %s AND student_id = %s',
+            (room_id, profile_id)
+        )
+        if cur.fetchone():
             return jsonify({'status': 'accepted', 'message': 'Déjà membre'}), 200
 
-        # Create or update to pending
-        cur.execute('''
-            INSERT INTO study_room_participants (room_id, student_id, status, is_present)
-            VALUES (%s, %s, 'pending', FALSE)
-            ON CONFLICT (room_id, student_id)
-            DO UPDATE SET status = 'pending', joined_at = NOW()
-        ''', (room_id, profile_id))
+        # Insert new pending request (no ON CONFLICT — table has no unique constraint)
+        cur.execute(
+            'INSERT INTO study_room_participants (room_id, student_id, status, is_present) VALUES (%s, %s, %s, FALSE)',
+            (room_id, profile_id, 'pending')
+        )
         conn.commit()
 
         # Notify the host via socket
@@ -421,12 +417,11 @@ def get_join_requests(room_id):
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Verify caller is host
-        cur.execute('''
-            SELECT r.id FROM study_rooms r
-            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
-            WHERE r.id = %s
-        ''', (str(user_id), room_id))
+        # Verify caller is host (host_id stores users.id directly)
+        cur.execute(
+            'SELECT id FROM study_rooms WHERE id = %s AND host_id = %s::uuid',
+            (room_id, str(user_id))
+        )
         if not cur.fetchone():
             return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
 
@@ -464,10 +459,9 @@ def accept_join_request(room_id, profile_id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         cur.execute('''
-            SELECT r.id FROM study_rooms r
-            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
-            WHERE r.id = %s
-        ''', (str(user_id), room_id))
+            SELECT id FROM study_rooms
+            WHERE id = %s AND host_id = %s::uuid
+        ''', (room_id, str(user_id)))
         if not cur.fetchone():
             return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
 
@@ -512,10 +506,9 @@ def reject_join_request(room_id, profile_id):
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         cur.execute('''
-            SELECT r.id FROM study_rooms r
-            JOIN student_profiles sp ON sp.id = r.host_id AND sp.user_id = %s
-            WHERE r.id = %s
-        ''', (str(user_id), room_id))
+            SELECT id FROM study_rooms
+            WHERE id = %s AND host_id = %s::uuid
+        ''', (room_id, str(user_id)))
         if not cur.fetchone():
             return jsonify({'error': 'Accès refusé — hôte uniquement'}), 403
 
