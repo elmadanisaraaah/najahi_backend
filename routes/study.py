@@ -140,7 +140,7 @@ def create_room():
             (id, host_id, nom, sujet, code_acces, max_participants,
              is_public, pomodoro_work, pomodoro_break, category, tag)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ''', (room_id, profile_id, nom,
+        ''', (room_id, user_id, nom,
               data.get('sujet') or None,
               code,
               data.get('max_participants', 10),
